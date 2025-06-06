@@ -4,7 +4,8 @@
             <el-header>
                 <el-row :gutter="20" class="mb-20">
                     <el-col :span="4">
-                        <el-select v-model="communicationType" placeholder="通信方式" @change="handleCommunicationTypeChange">
+                        <el-select v-model="communicationType" placeholder="通信方式"
+                            @change="handleCommunicationTypeChange">
                             <el-option label="串口" value="serial" />
                             <el-option label="UDP" value="udp" />
                         </el-select>
@@ -54,11 +55,8 @@
 
                 <el-row :gutter="20" class="mb-20">
                     <el-col :span="16">
-                        <el-input
-                            v-model="hexCommand"
-                            placeholder="输入十六进制命令 (例如: AB CD 01 00 00 00 02 00 00)"
-                            clearable
-                        >
+                        <el-input v-model="hexCommand" placeholder="输入十六进制命令 (例如: AB CD 01 00 00 00 02 00 00)"
+                            clearable>
                             <template #append>
                                 <el-button @click="sendHexCommand" :disabled="!isConnected">发送</el-button>
                             </template>
@@ -70,14 +68,8 @@
                         <div class="filter-bar">
                             <el-input v-model="searchText" placeholder="搜索日志" prefix-icon="el-icon-search" clearable
                                 @clear="filterLogs" @input="filterLogs" style="width: 200px" />
-                            <el-input-number 
-                                v-model="pageSize" 
-                                :min="1" 
-                                :max="1000"
-                                placeholder="每页显示条数"
-                                style="width: 120px"
-                                @change="handlePageSizeChange"
-                            />
+                            <el-input-number v-model="pageSize" :min="1" :max="1000" placeholder="每页显示条数"
+                                style="width: 120px" @change="handlePageSizeChange" />
                             <el-button size="small" @click="clearOutput">清空</el-button>
                             <el-button size="small" @click="showAboutDialog">关于</el-button>
                             <el-button size="small" @click="showTableConfig">表格设置</el-button>
@@ -90,40 +82,21 @@
                 <div class="serial-content">
                     <div class="output-window">
                         <div class="log-table-container" ref="logContainer">
-                            <el-table 
-                                :data="paginatedLogs" 
-                                style="width: 100%" 
-                                size="small" 
-                                height="100%" 
-                                border
+                            <el-table :data="paginatedLogs" style="width: 100%" size="small" height="100%" border
                                 :style="{
                                     fontSize: tableConfig.fontSize + 'px',
                                     fontFamily: tableConfig.fontFamily
-                                }"
-                            >
-                                <el-table-column 
-                                    prop="packetId" 
-                                    label="Packet ID" 
-                                    :width="tableConfig.columnWidths.packetId"
-                                    resizable
-                                />
-                                <el-table-column 
-                                    prop="context" 
-                                    label="Payload" 
-                                    :width="tableConfig.columnWidths.context"
-                                    resizable 
-                                />
+                                }">
+                                <el-table-column prop="packetId" label="Packet ID"
+                                    :width="tableConfig.columnWidths.packetId" resizable />
+                                <el-table-column prop="context" label="Payload"
+                                    :width="tableConfig.columnWidths.context" resizable />
                             </el-table>
                             <div class="pagination-container">
-                                <el-pagination
-                                    v-model:current-page="currentPage"
-                                    v-model:page-size="pageSize"
-                                    :page-sizes="pageSizes"
-                                    :total="filteredLogs.length"
-                                    layout="total, sizes, prev, pager, next, jumper"
-                                    @size-change="handlePageSizeChange"
-                                    @current-change="handleCurrentPageChange"
-                                />
+                                <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize"
+                                    :page-sizes="pageSizes" :total="filteredLogs.length"
+                                    layout="total, sizes, prev, pager, next, jumper" @size-change="handlePageSizeChange"
+                                    @current-change="handleCurrentPageChange" />
                             </div>
                         </div>
                     </div>
@@ -131,12 +104,7 @@
             </el-main>
 
             <!-- 关于对话框 -->
-            <el-dialog
-                v-model="aboutDialogVisible"
-                title="关于"
-                width="400px"
-                align-center
-            >
+            <el-dialog v-model="aboutDialogVisible" title="关于" width="400px" align-center>
                 <div class="about-content">
                     <h2>WhtsViewer</h2>
                     <p>版本：v{{ version }}</p>
@@ -156,41 +124,21 @@
             </el-dialog>
 
             <!-- 表格配置对话框 -->
-            <el-dialog
-                v-model="tableConfigVisible"
-                title="表格设置"
-                width="500px"
-            >
+            <el-dialog v-model="tableConfigVisible" title="表格设置" width="500px">
                 <div class="table-config">
                     <h3>列宽设置</h3>
                     <el-form label-width="100px">
                         <el-form-item label="时间戳宽度">
-                            <el-input-number 
-                                v-model="tableConfig.columnWidths.timestamp" 
-                                :min="50" 
-                                :max="300"
-                            />
+                            <el-input-number v-model="tableConfig.columnWidths.timestamp" :min="50" :max="300" />
                         </el-form-item>
                         <el-form-item label="Packet ID宽度">
-                            <el-input-number 
-                                v-model="tableConfig.columnWidths.packetId" 
-                                :min="50" 
-                                :max="200"
-                            />
+                            <el-input-number v-model="tableConfig.columnWidths.packetId" :min="50" :max="200" />
                         </el-form-item>
                         <el-form-item label="Context宽度">
-                            <el-input-number 
-                                v-model="tableConfig.columnWidths.context" 
-                                :min="100" 
-                                :max="1000"
-                            />
+                            <el-input-number v-model="tableConfig.columnWidths.context" :min="100" :max="1000" />
                         </el-form-item>
                         <el-form-item label="Raw Data宽度">
-                            <el-input-number 
-                                v-model="tableConfig.columnWidths.rawData" 
-                                :min="100" 
-                                :max="1000"
-                            />
+                            <el-input-number v-model="tableConfig.columnWidths.rawData" :min="100" :max="1000" />
                         </el-form-item>
                     </el-form>
 
@@ -205,11 +153,7 @@
                             </el-select>
                         </el-form-item>
                         <el-form-item label="字号">
-                            <el-input-number 
-                                v-model="tableConfig.fontSize" 
-                                :min="12" 
-                                :max="20"
-                            />
+                            <el-input-number v-model="tableConfig.fontSize" :min="12" :max="20" />
                         </el-form-item>
                     </el-form>
                 </div>
@@ -342,12 +286,12 @@ export default {
                         // 验证输入
                         const localPort = parseInt(udpConfig.value.localPort);
                         const remotePort = parseInt(udpConfig.value.remotePort);
-                        
+
                         if (isNaN(localPort) || localPort <= 0 || localPort > 65535) {
                             ElMessage.error('本地端口必须是1-65535之间的数字');
                             return;
                         }
-                        
+
                         if (isNaN(remotePort) || remotePort <= 0 || remotePort > 65535) {
                             ElMessage.error('远程端口必须是1-65535之间的数字');
                             return;
@@ -413,21 +357,73 @@ export default {
 
         // 处理UDP数据
         const handleUdpData = (event, { data }) => {
-            // 将接收到的数据转换为十六进制字符串
-            const hexData = Array.from(new Uint8Array(data))
-                .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
-                .join(' ');
-
-            logs.value.push({
-                packetId: '--',  // 不解析，直接显示占位符
-                context: hexData // 直接显示原始数据
-            });
+            console.log('UDP data received:', data);
+            console.log('UDP data type:', typeof data);
+            console.log('UDP data length:', data.length);
+            
+            // 解析Whts协议
+            const whtsFrame = parseWhtsData(data);
+            if (whtsFrame) {
+                logs.value.push({
+                    packetId: '0x' + whtsFrame.packetId.toString(16).toUpperCase().padStart(2, '0'),
+                    context: whtsFrame.payload
+                });
+            } else {
+                // 如果解析失败，显示原始数据
+                const hexData = Array.from(new Uint8Array(data))
+                    .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
+                    .join(' ');
+                
+                logs.value.push({
+                    packetId: '--',
+                    context: hexData
+                });
+            }
 
             // 如果在最后一页，自动跳转到新的最后一页
             const maxPage = Math.ceil(filteredLogs.value.length / pageSize.value);
             if (currentPage.value === maxPage || currentPage.value === maxPage - 1) {
                 currentPage.value = Math.ceil(logs.value.length / pageSize.value);
             }
+        };
+
+        // 添加Whts协议解析函数
+        const parseWhtsData = (data) => {
+            const bytes = new Uint8Array(data);
+            
+            // 检查数据长度是否足够
+            if (bytes.length < 7) {
+                console.log('Data too short for Whts protocol');
+                return null;
+            }
+            
+            // 检查帧头
+            if (bytes[0] !== 0xAB || bytes[1] !== 0xCD) {
+                console.log('Invalid frame header');
+                return null;
+            }
+            
+            // 获取PacketID
+            const packetId = bytes[2];
+            
+            // 获取数据长度（小端格式）
+            const length = bytes[6] << 8 | bytes[5];
+            
+            // 检查数据长度是否合理
+            if (length + 7 > bytes.length) {
+                console.log('Invalid data length');
+                return null;
+            }
+            
+            // 提取Payload
+            const payload = Array.from(bytes.slice(7, 7 + length))
+                .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
+                .join(' ');
+            
+            return {
+                packetId,
+                payload
+            };
         };
 
         // 处理串口数据
@@ -548,7 +544,7 @@ export default {
 
             try {
                 const hexArray = new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-                
+
                 if (communicationType.value === 'serial') {
                     await window.electronAPI.writePort(hexArray);
                 } else if (communicationType.value === 'udp') {
@@ -602,7 +598,7 @@ export default {
             // 提取payload并转换为十六进制字符串
             const payloadArray = Array.from(data.slice(frameStart + 7, totalLength));
             frame.payload = payloadArray.map(byte => byte.toString(16).toUpperCase().padStart(2, '0')).join(' ');
-            
+
             return frame;
         };
 
@@ -673,7 +669,8 @@ export default {
 
 <style>
 .serial-port-assistant {
-    position: fixed;  /* 使用固定定位铺满整个窗口 */
+    position: fixed;
+    /* 使用固定定位铺满整个窗口 */
     top: 0;
     left: 0;
     right: 0;
@@ -724,14 +721,16 @@ export default {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0; /* 重要：允许flex子项收缩 */
+    min-height: 0;
+    /* 重要：允许flex子项收缩 */
 }
 
 .output-window {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0; /* 重要：允许flex子项收缩 */
+    min-height: 0;
+    /* 重要：允许flex子项收缩 */
 }
 
 .filter-bar {
@@ -744,7 +743,8 @@ export default {
 .log-table-container {
     flex: 1;
     overflow: hidden;
-    min-height: 0; /* 重要：允许flex子项收缩 */
+    min-height: 0;
+    /* 重要：允许flex子项收缩 */
 }
 
 .el-textarea {

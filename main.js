@@ -159,6 +159,7 @@ ipcMain.handle('createUdpSocket', async (event, { localPort, remoteIp, remotePor
 
     // 监听数据
     udpSocket.on('message', (msg, rinfo) => {
+      console.log(msg);
       mainWindow.webContents.send('udp-data', {
         data: msg,
         rinfo: rinfo
