@@ -30,8 +30,8 @@
     "vite": "^4.4.7"
   },
   "build": {
-    "appId": "com.seriallog.viewer",
-    "productName": "SerialLog Viewer",
+    "appId": "com.whts.viewer",
+    "productName": "Whts Viewer",
     "directories": {
       "output": "dist_electron"
     },
@@ -55,7 +55,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ylongwang2782/SerialLogViewer.git"
+    "url": "git+https://github.com/ylongwang2782/WhtsViewer.git"
   },
   "keywords": [
     "serial-port",
