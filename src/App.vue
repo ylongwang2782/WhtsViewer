@@ -62,6 +62,12 @@
                             </template>
                         </el-input>
                     </el-col>
+                    <el-col :span="4">
+                        <el-button type="success" @click="sendStartCommand" :disabled="!isConnected">开始</el-button>
+                    </el-col>
+                    <el-col :span="4">
+                        <el-button type="danger" @click="sendStopCommand" :disabled="!isConnected">停止</el-button>
+                    </el-col>
                 </el-row>
                 <el-row :gutter="20">
                     <el-col :span="24">
@@ -91,6 +97,10 @@
                                     :width="tableConfig.columnWidths.packetId" resizable />
                                 <el-table-column prop="message" label="Message"
                                     :width="tableConfig.columnWidths.message" resizable />
+                                <el-table-column prop="slaveId" label="Slave ID"
+                                    :width="tableConfig.columnWidths.slaveId" resizable />
+                                <el-table-column prop="deviceStatus" label="Device Status"
+                                    :width="tableConfig.columnWidths.deviceStatus" resizable />
                                 <el-table-column prop="context" label="Payload"
                                     :width="tableConfig.columnWidths.context" resizable />
                             </el-table>
@@ -138,6 +148,12 @@
                         </el-form-item>
                         <el-form-item label="Message宽度">
                             <el-input-number v-model="tableConfig.columnWidths.message" :min="100" :max="200" />
+                        </el-form-item>
+                        <el-form-item label="Slave ID宽度">
+                            <el-input-number v-model="tableConfig.columnWidths.slaveId" :min="50" :max="200" />
+                        </el-form-item>
+                        <el-form-item label="Device Status宽度">
+                            <el-input-number v-model="tableConfig.columnWidths.deviceStatus" :min="50" :max="200" />
                         </el-form-item>
                         <el-form-item label="Context宽度">
                             <el-input-number v-model="tableConfig.columnWidths.context" :min="100" :max="1000" />
@@ -383,22 +399,27 @@ export default {
             return MASTER2BACKEND_MSG_TYPES[msgId] || `Unknown(0x${msgId.toString(16).toUpperCase()})`;
         };
 
+        // 添加Slave2Backend消息类型映射
+        const SLAVE2BACKEND_MSG_TYPES = {
+            0x00: 'CONDUCTION_DATA_MSG',
+            0x01: 'RESISTANCE_DATA_MSG',
+            0x02: 'CLIP_DATA_MSG'
+        };
+
         // 处理UDP数据
         const handleUdpData = (event, { data }) => {
             console.log('UDP data received:', data);
-            console.log('UDP data type:', typeof data);
-            console.log('UDP data length:', data.length);
             
-            // 解析Whts协议
             const whtsFrame = parseWhtsData(data);
             if (whtsFrame) {
                 logs.value.push({
                     packetId: getPacketTypeName(whtsFrame.packetId),
-                    message: whtsFrame.msgType || '--',  // 如果不是Master2Backend包或解析失败则显示'--'
-                    context: whtsFrame.msgType ? whtsFrame.msgPayload : whtsFrame.payload  // 如果有消息类型则显示消息负载，否则显示完整负载
+                    message: whtsFrame.msgType || '--',
+                    slaveId: whtsFrame.slaveId || '--',
+                    deviceStatus: whtsFrame.deviceStatus || '--',
+                    context: whtsFrame.msgType ? whtsFrame.msgPayload : whtsFrame.payload
                 });
             } else {
-                // 如果解析失败，显示原始数据
                 const hexData = Array.from(new Uint8Array(data))
                     .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
                     .join(' ');
@@ -406,10 +427,12 @@ export default {
                 logs.value.push({
                     packetId: 'Invalid Frame',
                     message: '--',
+                    slaveId: '--',
+                    deviceStatus: '--',
                     context: hexData
                 });
             }
-
+            
             // 如果在最后一页，自动跳转到新的最后一页
             const maxPage = Math.ceil(filteredLogs.value.length / pageSize.value);
             if (currentPage.value === maxPage || currentPage.value === maxPage - 1) {
@@ -448,12 +471,27 @@ export default {
             // 解析消息
             let msgType = null;
             let msgPayload = null;
+            let slaveId = null;
+            let deviceStatus = null;
             
             if (packetId === 0x03 && length > 0) { // Master2Backend packet
-                const messageId = bytes[7]; // 第一个字节是Message ID
+                const messageId = bytes[7];
                 msgType = getMsgTypeName(messageId);
-                // 从Message ID后面开始的数据作为Msg Payload
                 msgPayload = Array.from(bytes.slice(8, 7 + length))
+                    .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
+                    .join(' ');
+            } else if (packetId === 0x04 && length >= 7) { // Slave2Backend packet
+                const messageId = bytes[7];
+                msgType = SLAVE2BACKEND_MSG_TYPES[messageId] || `Unknown(0x${messageId.toString(16).toUpperCase()})`;
+                
+                // 解析Slave ID (4字节，小端)
+                slaveId = bytes[8] | (bytes[9] << 8) | (bytes[10] << 16) | (bytes[11] << 24);
+                
+                // 解析Device Status (2字节)
+                deviceStatus = (bytes[12] << 8) | bytes[13];
+                
+                // 剩余的数据作为Payload
+                msgPayload = Array.from(bytes.slice(14, 7 + length))
                     .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
                     .join(' ');
             }
@@ -467,7 +505,9 @@ export default {
                 packetId,
                 payload,
                 msgType,
-                msgPayload
+                msgPayload,
+                slaveId: slaveId !== null ? `0x${slaveId.toString(16).toUpperCase()}` : null,
+                deviceStatus: deviceStatus !== null ? `0x${deviceStatus.toString(16).toUpperCase()}` : null
             };
         };
 
@@ -543,9 +583,11 @@ export default {
         const tableConfigVisible = ref(false);
         const tableConfig = ref({
             columnWidths: {
-                packetId: 150,  // 增加宽度以适应包类型名称
-                message: 150,   // 新增消息列的宽度
-                context: 600    // 调整payload列宽度
+                packetId: 150,
+                message: 150,
+                slaveId: 100,
+                deviceStatus: 100,
+                context: 400
             },
             fontSize: 14,
             fontFamily: 'monospace'
@@ -655,6 +697,35 @@ export default {
             remotePort: '8080'
         });
 
+        // 添加开始/停止命令函数
+        const sendStartCommand = async () => {
+            if (!isConnected.value) {
+                ElMessage.warning('请先建立连接');
+                return;
+            }
+            const startCmd = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x03, 0x01]);
+            try {
+                await window.electronAPI.sendUdpData(startCmd);
+                ElMessage.success('已发送开始命令');
+            } catch (error) {
+                ElMessage.error('发送失败：' + error.message);
+            }
+        };
+
+        const sendStopCommand = async () => {
+            if (!isConnected.value) {
+                ElMessage.warning('请先建立连接');
+                return;
+            }
+            const stopCmd = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x03, 0x00]);
+            try {
+                await window.electronAPI.sendUdpData(stopCmd);
+                ElMessage.success('已发送停止命令');
+            } catch (error) {
+                ElMessage.error('发送失败：' + error.message);
+            }
+        };
+
         onMounted(() => {
             scanPorts();
             window.electronAPI.onSerialData(handleSerialData);
@@ -707,7 +778,9 @@ export default {
             handleCommunicationTypeChange,
             isConnected,
             handleSerialData,
-            handleUdpData
+            handleUdpData,
+            sendStartCommand,
+            sendStopCommand
         };
     }
 };
