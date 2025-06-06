@@ -89,6 +89,8 @@
                                 }">
                                 <el-table-column prop="packetId" label="Packet"
                                     :width="tableConfig.columnWidths.packetId" resizable />
+                                <el-table-column prop="message" label="Message"
+                                    :width="tableConfig.columnWidths.message" resizable />
                                 <el-table-column prop="context" label="Payload"
                                     :width="tableConfig.columnWidths.context" resizable />
                             </el-table>
@@ -134,11 +136,11 @@
                         <el-form-item label="Packet ID宽度">
                             <el-input-number v-model="tableConfig.columnWidths.packetId" :min="50" :max="200" />
                         </el-form-item>
+                        <el-form-item label="Message宽度">
+                            <el-input-number v-model="tableConfig.columnWidths.message" :min="100" :max="200" />
+                        </el-form-item>
                         <el-form-item label="Context宽度">
                             <el-input-number v-model="tableConfig.columnWidths.context" :min="100" :max="1000" />
-                        </el-form-item>
-                        <el-form-item label="Raw Data宽度">
-                            <el-input-number v-model="tableConfig.columnWidths.rawData" :min="100" :max="1000" />
                         </el-form-item>
                     </el-form>
 
@@ -368,6 +370,19 @@ export default {
             return PACKET_TYPES[packetId] || `Unknown(0x${packetId.toString(16).toUpperCase()})`;
         };
 
+        // 添加Master2Backend消息类型映射
+        const MASTER2BACKEND_MSG_TYPES = {
+            0x00: 'SLAVE_CFG_MSG',
+            0x01: 'MODE_CFG_MSG',
+            0x02: 'RST_MSG',
+            0x03: 'CTRL_MSG',
+            0x10: 'PING_RES_MSG'
+        };
+
+        const getMsgTypeName = (msgId) => {
+            return MASTER2BACKEND_MSG_TYPES[msgId] || `Unknown(0x${msgId.toString(16).toUpperCase()})`;
+        };
+
         // 处理UDP数据
         const handleUdpData = (event, { data }) => {
             console.log('UDP data received:', data);
@@ -378,8 +393,9 @@ export default {
             const whtsFrame = parseWhtsData(data);
             if (whtsFrame) {
                 logs.value.push({
-                    packetId: getPacketTypeName(whtsFrame.packetId),  // 使用包类型名称替代ID
-                    context: whtsFrame.payload
+                    packetId: getPacketTypeName(whtsFrame.packetId),
+                    message: whtsFrame.msgType || '--',  // 如果不是Master2Backend包或解析失败则显示'--'
+                    context: whtsFrame.msgType ? whtsFrame.msgPayload : whtsFrame.payload  // 如果有消息类型则显示消息负载，否则显示完整负载
                 });
             } else {
                 // 如果解析失败，显示原始数据
@@ -388,7 +404,8 @@ export default {
                     .join(' ');
                 
                 logs.value.push({
-                    packetId: 'Invalid Frame',  // 更改未知包的显示文本
+                    packetId: 'Invalid Frame',
+                    message: '--',
                     context: hexData
                 });
             }
@@ -427,15 +444,30 @@ export default {
                 console.log('Invalid data length');
                 return null;
             }
+
+            // 解析消息
+            let msgType = null;
+            let msgPayload = null;
             
-            // 提取Payload
+            if (packetId === 0x03 && length > 0) { // Master2Backend packet
+                const messageId = bytes[7]; // 第一个字节是Message ID
+                msgType = getMsgTypeName(messageId);
+                // 从Message ID后面开始的数据作为Msg Payload
+                msgPayload = Array.from(bytes.slice(8, 7 + length))
+                    .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
+                    .join(' ');
+            }
+            
+            // 提取完整Payload
             const payload = Array.from(bytes.slice(7, 7 + length))
                 .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
                 .join(' ');
             
             return {
                 packetId,
-                payload
+                payload,
+                msgType,
+                msgPayload
             };
         };
 
@@ -511,11 +543,12 @@ export default {
         const tableConfigVisible = ref(false);
         const tableConfig = ref({
             columnWidths: {
-                packetId: 100,
-                context: 800
+                packetId: 150,  // 增加宽度以适应包类型名称
+                message: 150,   // 新增消息列的宽度
+                context: 600    // 调整payload列宽度
             },
             fontSize: 14,
-            fontFamily: 'monospace' // 使用等宽字体以便对齐十六进制数据
+            fontFamily: 'monospace'
         });
 
         // 从localStorage加载表格配置
