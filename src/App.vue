@@ -86,32 +86,49 @@
 
             <el-main>
                 <div class="serial-content">
-                    <div class="output-window">
-                        <div class="log-table-container" ref="logContainer">
-                            <el-table :data="paginatedLogs" style="width: 100%" size="small" height="100%" border
-                                :style="{
-                                    fontSize: tableConfig.fontSize + 'px',
-                                    fontFamily: tableConfig.fontFamily
-                                }">
-                                <el-table-column prop="packetId" label="Packet"
-                                    :width="tableConfig.columnWidths.packetId" resizable />
-                                <el-table-column prop="message" label="Message"
-                                    :width="tableConfig.columnWidths.message" resizable />
-                                <el-table-column prop="slaveId" label="Slave ID"
-                                    :width="tableConfig.columnWidths.slaveId" resizable />
-                                <el-table-column prop="deviceStatus" label="Device Status"
-                                    :width="tableConfig.columnWidths.deviceStatus" resizable />
-                                <el-table-column prop="context" label="Payload"
-                                    :width="tableConfig.columnWidths.context" resizable />
-                            </el-table>
-                            <div class="pagination-container">
-                                <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize"
-                                    :page-sizes="pageSizes" :total="filteredLogs.length"
-                                    layout="total, sizes, prev, pager, next, jumper" @size-change="handlePageSizeChange"
-                                    @current-change="handleCurrentPageChange" />
+                    <el-tabs type="border-card">
+                        <el-tab-pane label="所有数据">
+                            <div class="output-window">
+                                <div class="log-table-container" ref="logContainer">
+                                    <el-table :data="paginatedLogs" style="width: 100%" size="small" height="calc(100% - 50px)" border
+                                        :style="{
+                                            fontSize: tableConfig.fontSize + 'px',
+                                            fontFamily: tableConfig.fontFamily
+                                        }">
+                                        <el-table-column prop="timestamp" label="Time" width="100" />
+                                        <el-table-column prop="packetId" label="Packet" :width="tableConfig.columnWidths.packetId" resizable />
+                                        <el-table-column prop="message" label="Message" :width="tableConfig.columnWidths.message" resizable />
+                                        <el-table-column prop="slaveId" label="Slave ID" :width="tableConfig.columnWidths.slaveId" resizable />
+                                        <el-table-column prop="deviceStatus" label="Device Status" :width="tableConfig.columnWidths.deviceStatus" resizable />
+                                        <el-table-column prop="context" label="Payload" :width="tableConfig.columnWidths.context" resizable />
+                                    </el-table>
+                                    <div class="pagination-container">
+                                        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize"
+                                            :page-sizes="pageSizes" :total="filteredLogs.length"
+                                            layout="total, sizes, prev, pager, next, jumper" @size-change="handlePageSizeChange"
+                                            @current-change="handleCurrentPageChange" />
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
+                        </el-tab-pane>
+                        <el-tab-pane label="Slave2Backend实时数据">
+                            <div class="output-window">
+                                <div class="log-table-container">
+                                    <el-table :data="slave2BackendLogsArray" style="width: 100%" size="small" height="100%" border
+                                        :style="{
+                                            fontSize: tableConfig.fontSize + 'px',
+                                            fontFamily: tableConfig.fontFamily
+                                        }">
+                                        <el-table-column prop="lastUpdate" label="Last Update" width="100" />
+                                        <el-table-column prop="message" label="Message" :width="tableConfig.columnWidths.message" resizable />
+                                        <el-table-column prop="slaveId" label="Slave ID" :width="tableConfig.columnWidths.slaveId" resizable />
+                                        <el-table-column prop="deviceStatus" label="Device Status" :width="tableConfig.columnWidths.deviceStatus" resizable />
+                                        <el-table-column prop="context" label="Payload" :width="tableConfig.columnWidths.context" resizable />
+                                    </el-table>
+                                </div>
+                            </div>
+                        </el-tab-pane>
+                    </el-tabs>
                 </div>
             </el-main>
 
@@ -406,19 +423,60 @@ export default {
             0x02: 'CLIP_DATA_MSG'
         };
 
-        // 处理UDP数据
+        // 添加Slave2Backend数据存储
+        const slave2BackendLogs = ref(new Map()); // 使用Map来存储最新的Slave2Backend数据，key为SlaveId
+
+        // 计算属性：将Map转换为数组以供表格使用
+        const slave2BackendLogsArray = computed(() => {
+            return Array.from(slave2BackendLogs.value.values());
+        });
+
+        // 修改handleUdpData函数
         const handleUdpData = (event, { data }) => {
             console.log('UDP data received:', data);
             
             const whtsFrame = parseWhtsData(data);
             if (whtsFrame) {
-                logs.value.push({
+                const logEntry = {
                     packetId: getPacketTypeName(whtsFrame.packetId),
                     message: whtsFrame.msgType || '--',
                     slaveId: whtsFrame.slaveId || '--',
                     deviceStatus: whtsFrame.deviceStatus || '--',
-                    context: whtsFrame.msgType ? whtsFrame.msgPayload : whtsFrame.payload
-                });
+                    context: whtsFrame.msgType ? whtsFrame.msgPayload : whtsFrame.payload,
+                    timestamp: new Date().toLocaleTimeString() // 添加时间戳
+                };
+
+                // 处理Slave2Backend包
+                if (whtsFrame.packetId === 0x04) {
+                    // 更新Slave2Backend专用表格
+                    slave2BackendLogs.value.set(whtsFrame.slaveId, {
+                        ...logEntry,
+                        lastUpdate: new Date().toLocaleTimeString()
+                    });
+
+                    // 对于CONDUCTION_DATA_MSG，更新而不是追加到主日志
+                    if (whtsFrame.msgType === 'CONDUCTION_DATA_MSG') {
+                        // 查找并更新现有的CONDUCTION_DATA_MSG条目
+                        const existingIndex = logs.value.findIndex(log => 
+                            log.slaveId === whtsFrame.slaveId && 
+                            log.message === 'CONDUCTION_DATA_MSG'
+                        );
+                        
+                        if (existingIndex !== -1) {
+                            // 更新现有条目
+                            logs.value[existingIndex] = logEntry;
+                        } else {
+                            // 如果不存在，则添加新条目
+                            logs.value.push(logEntry);
+                        }
+                    } else {
+                        // 其他类型的Slave2Backend消息正常添加
+                        logs.value.push(logEntry);
+                    }
+                } else {
+                    // 非Slave2Backend包正常添加到日志
+                    logs.value.push(logEntry);
+                }
             } else {
                 const hexData = Array.from(new Uint8Array(data))
                     .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
@@ -429,11 +487,12 @@ export default {
                     message: '--',
                     slaveId: '--',
                     deviceStatus: '--',
-                    context: hexData
+                    context: hexData,
+                    timestamp: new Date().toLocaleTimeString()
                 });
             }
-            
-            // 如果在最后一页，自动跳转到新的最后一页
+
+            // 更新分页
             const maxPage = Math.ceil(filteredLogs.value.length / pageSize.value);
             if (currentPage.value === maxPage || currentPage.value === maxPage - 1) {
                 currentPage.value = Math.ceil(logs.value.length / pageSize.value);
@@ -780,7 +839,9 @@ export default {
             handleSerialData,
             handleUdpData,
             sendStartCommand,
-            sendStopCommand
+            sendStopCommand,
+            slave2BackendLogs,
+            slave2BackendLogsArray
         };
     }
 };
@@ -998,5 +1059,20 @@ export default {
 
 .table-config .el-form {
     margin-top: 15px;
+}
+
+.el-tabs {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.el-tabs__content {
+    flex: 1;
+    overflow: hidden;
+}
+
+.el-tab-pane {
+    height: 100%;
 }
 </style>
