@@ -87,7 +87,7 @@
                                     fontSize: tableConfig.fontSize + 'px',
                                     fontFamily: tableConfig.fontFamily
                                 }">
-                                <el-table-column prop="packetId" label="Packet ID"
+                                <el-table-column prop="packetId" label="Packet"
                                     :width="tableConfig.columnWidths.packetId" resizable />
                                 <el-table-column prop="context" label="Payload"
                                     :width="tableConfig.columnWidths.context" resizable />
@@ -355,6 +355,19 @@ export default {
             }
         };
 
+        // 添加Whts包类型映射
+        const PACKET_TYPES = {
+            0x00: 'Master2Slave',
+            0x01: 'Slave2Master',
+            0x02: 'Backend2Master',
+            0x03: 'Master2Backend',
+            0x04: 'Slave2Backend'
+        };
+
+        const getPacketTypeName = (packetId) => {
+            return PACKET_TYPES[packetId] || `Unknown(0x${packetId.toString(16).toUpperCase()})`;
+        };
+
         // 处理UDP数据
         const handleUdpData = (event, { data }) => {
             console.log('UDP data received:', data);
@@ -365,7 +378,7 @@ export default {
             const whtsFrame = parseWhtsData(data);
             if (whtsFrame) {
                 logs.value.push({
-                    packetId: '0x' + whtsFrame.packetId.toString(16).toUpperCase().padStart(2, '0'),
+                    packetId: getPacketTypeName(whtsFrame.packetId),  // 使用包类型名称替代ID
                     context: whtsFrame.payload
                 });
             } else {
@@ -375,7 +388,7 @@ export default {
                     .join(' ');
                 
                 logs.value.push({
-                    packetId: '--',
+                    packetId: 'Invalid Frame',  // 更改未知包的显示文本
                     context: hexData
                 });
             }
