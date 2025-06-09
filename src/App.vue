@@ -111,7 +111,7 @@
                                 </div>
                             </div>
                         </el-tab-pane>
-                        <el-tab-pane label="Slave2Backend实时数据">
+                        <el-tab-pane label="导通数据">
                             <div class="output-window">
                                 <div class="log-table-container">
                                     <el-table :data="slave2BackendLogsArray" style="width: 100%" size="small" height="100%" border
@@ -120,10 +120,9 @@
                                             fontFamily: tableConfig.fontFamily
                                         }">
                                         <el-table-column prop="lastUpdate" label="Last Update" width="100" />
-                                        <el-table-column prop="message" label="Message" :width="tableConfig.columnWidths.message" resizable />
                                         <el-table-column prop="slaveId" label="Slave ID" :width="tableConfig.columnWidths.slaveId" resizable />
                                         <el-table-column prop="deviceStatus" label="Device Status" :width="tableConfig.columnWidths.deviceStatus" resizable />
-                                        <el-table-column prop="context" label="Payload" :width="tableConfig.columnWidths.context" resizable />
+                                        <el-table-column prop="context" label="Conduction Data" :width="tableConfig.columnWidths.context" resizable />
                                     </el-table>
                                 </div>
                             </div>
@@ -499,7 +498,7 @@ export default {
             }
         };
 
-        // 添加Whts协议解析函数
+        // 修改parseWhtsData函数中解析Slave2Backend的部分
         const parseWhtsData = (data) => {
             const bytes = new Uint8Array(data);
             
@@ -549,10 +548,20 @@ export default {
                 // 解析Device Status (2字节)
                 deviceStatus = (bytes[12] << 8) | bytes[13];
                 
-                // 剩余的数据作为Payload
-                msgPayload = Array.from(bytes.slice(14, 7 + length))
-                    .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
-                    .join(' ');
+                if (messageId === 0x00) { // CONDUCTION_DATA_MSG
+                    // 解析导通数据长度（2字节）
+                    const conductionLength = bytes[14] | (bytes[15] << 8);
+                    
+                    // 只提取导通数据部分（不包含长度字段）
+                    msgPayload = Array.from(bytes.slice(16, 14 + conductionLength + 2))
+                        .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
+                        .join(' ');
+                } else {
+                    // 其他消息类型的处理保持不变
+                    msgPayload = Array.from(bytes.slice(14, 7 + length))
+                        .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
+                        .join(' ');
+                }
             }
             
             // 提取完整Payload
