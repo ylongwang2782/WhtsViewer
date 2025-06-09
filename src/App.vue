@@ -113,14 +113,33 @@
                         </el-tab-pane>
                         <el-tab-pane label="导通数据">
                             <div class="output-window">
+                                <div class="control-panel mb-20">
+                                    <el-form inline>
+                                        <el-form-item label="设备离线超时(ms)">
+                                            <el-input-number 
+                                                v-model="offlineTimeout"
+                                                :min="1000"
+                                                :max="60000"
+                                                :step="1000"
+                                                @change="checkDeviceStatus"
+                                            />
+                                        </el-form-item>
+                                    </el-form>
+                                </div>
                                 <div class="log-table-container">
-                                    <el-table :data="slave2BackendLogsArray" style="width: 100%" size="small" height="100%" border
+                                    <el-table :data="slave2BackendLogsArray" style="width: 100%" size="small" height="calc(100% - 50px)" border
                                         :style="{
                                             fontSize: tableConfig.fontSize + 'px',
                                             fontFamily: tableConfig.fontFamily
                                         }">
                                         <el-table-column prop="lastUpdate" label="Last Update" width="100" />
-                                        <el-table-column prop="slaveId" label="Slave ID" :width="tableConfig.columnWidths.slaveId" resizable />
+                                        <el-table-column prop="slaveId" label="Slave ID" :width="tableConfig.columnWidths.slaveId" resizable>
+                                            <template #default="scope">
+                                                <span :class="{ 'offline-device': scope.row.isOffline }">
+                                                    {{ scope.row.slaveId }}
+                                                </span>
+                                            </template>
+                                        </el-table-column>
                                         <el-table-column label="Device Status" align="center">
                                             <el-table-column prop="cs" label="CS" width="40" align="center">
                                                 <template #default="scope">
@@ -509,6 +528,32 @@ export default {
             };
         };
 
+        // 添加设备掉线检测配置
+        const offlineTimeout = ref(5000); // 默认5秒超时
+        const deviceLastUpdateTime = ref(new Map()); // 存储每个设备的最后更新时间
+        const deviceOnlineStatus = ref(new Map()); // 存储设备在线状态
+
+        // 添加检测定时器
+        let offlineCheckTimer = null;
+
+        // 检查设备在线状态
+        const checkDeviceStatus = () => {
+            const now = Date.now();
+            deviceLastUpdateTime.value.forEach((lastUpdate, slaveId) => {
+                const isOnline = (now - lastUpdate) <= offlineTimeout.value;
+                deviceOnlineStatus.value.set(slaveId, isOnline);
+                
+                // 如果设备离线，更新显示状态
+                if (!isOnline && slave2BackendLogs.value.has(slaveId)) {
+                    const currentData = slave2BackendLogs.value.get(slaveId);
+                    slave2BackendLogs.value.set(slaveId, {
+                        ...currentData,
+                        isOffline: true
+                    });
+                }
+            });
+        };
+
         // 修改handleUdpData函数中处理Slave2Backend的部分
         const handleUdpData = (event, { data }) => {
             console.log('UDP data received:', data);
@@ -525,13 +570,17 @@ export default {
                 };
 
                 if (whtsFrame.packetId === 0x04) {
-                    // 解析设备状态位
                     const deviceStatusBits = parseDeviceStatus(parseInt(whtsFrame.deviceStatus.slice(2), 16));
+                    
+                    // 更新设备最后通信时间
+                    deviceLastUpdateTime.value.set(whtsFrame.slaveId, Date.now());
+                    deviceOnlineStatus.value.set(whtsFrame.slaveId, true);
                     
                     slave2BackendLogs.value.set(whtsFrame.slaveId, {
                         ...logEntry,
                         lastUpdate: new Date().toLocaleTimeString(),
-                        ...deviceStatusBits  // 展开设备状态位
+                        ...deviceStatusBits,
+                        isOffline: false
                     });
 
                     // 对于CONDUCTION_DATA_MSG，更新而不是追加到主日志
@@ -880,11 +929,15 @@ export default {
             window.electronAPI.onSerialData(handleSerialData);
             window.electronAPI.onUdpData(handleUdpData);
             loadTableConfig();
+            offlineCheckTimer = setInterval(checkDeviceStatus, 1000); // 每秒检查一次
         });
 
         onUnmounted(() => {
             window.electronAPI.removeSerialDataListener();
             window.electronAPI.removeUdpDataListener();
+            if (offlineCheckTimer) {
+                clearInterval(offlineCheckTimer);
+            }
         });
 
         return {
@@ -931,7 +984,9 @@ export default {
             sendStartCommand,
             sendStopCommand,
             slave2BackendLogs,
-            slave2BackendLogsArray
+            slave2BackendLogsArray,
+            offlineTimeout,
+            deviceOnlineStatus
         };
     }
 };
@@ -1169,5 +1224,17 @@ export default {
 .el-tag--small {
     margin: 0;
     padding: 0 2px;
+}
+
+.offline-device {
+    color: #F56C6C;
+    font-weight: bold;
+}
+
+.control-panel {
+    background-color: #fff;
+    padding: 10px;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
 }
 </style>
