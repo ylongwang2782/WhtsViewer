@@ -62,11 +62,15 @@
                             </template>
                         </el-input>
                     </el-col>
-                    <el-col :span="4">
-                        <el-button type="success" @click="sendStartCommand" :disabled="!isConnected">开始</el-button>
-                    </el-col>
-                    <el-col :span="4">
-                        <el-button type="danger" @click="sendStopCommand" :disabled="!isConnected">停止</el-button>
+                    <el-col :span="8">
+                        <el-button 
+                            :type="isRunning ? 'danger' : 'success'"
+                            :loading="isWaitingResponse"
+                            @click="handleCtrlCommand"
+                            :disabled="!isConnected"
+                        >
+                            {{ isWaitingResponse ? '等待响应...' : (isRunning ? '停止' : '开始') }}
+                        </el-button>
                     </el-col>
                 </el-row>
                 <el-row :gutter="20">
@@ -554,7 +558,44 @@ export default {
             });
         };
 
-        // 修改handleUdpData函数中处理Slave2Backend的部分
+        // 添加运行状态控制
+        const isRunning = ref(false);
+        const isWaitingResponse = ref(false);
+        const responseTimeout = ref(null);
+
+        // 修改控制命令处理
+        const handleCtrlCommand = async () => {
+            if (!isConnected.value) {
+                ElMessage.warning('请先建立连接');
+                return;
+            }
+
+            try {
+                isWaitingResponse.value = true;
+                const runningStatus = !isRunning.value ? 1 : 0; // 切换状态
+                const ctrlCmd = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x03, runningStatus]);
+                
+                await window.electronAPI.sendUdpData(ctrlCmd);
+                
+                // 设置响应超时
+                if (responseTimeout.value) {
+                    clearTimeout(responseTimeout.value);
+                }
+                
+                responseTimeout.value = setTimeout(() => {
+                    if (isWaitingResponse.value) {
+                        isWaitingResponse.value = false;
+                        ElMessage.error('主机响应超时');
+                    }
+                }, 3000); // 3秒超时
+                
+            } catch (error) {
+                isWaitingResponse.value = false;
+                ElMessage.error('发送失败：' + error.message);
+            }
+        };
+
+        // 修改handleUdpData函数，添加对Master2Backend Ctrl Message的处理
         const handleUdpData = (event, { data }) => {
             console.log('UDP data received:', data);
             
@@ -603,8 +644,29 @@ export default {
                         logs.value.push(logEntry);
                     }
                 } else {
-                    // 非Slave2Backend包正常添加到日志
-                    logs.value.push(logEntry);
+                    // 处理Master2Backend的Ctrl Message响应
+                    if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'CTRL_MSG' && isWaitingResponse.value) {
+                        isWaitingResponse.value = false;
+                        if (responseTimeout.value) {
+                            clearTimeout(responseTimeout.value);
+                        }
+
+                        const payload = whtsFrame.msgPayload.split(' ');
+                        if (payload.length >= 2) {
+                            const status = parseInt(payload[0], 16);
+                            const runningStatus = parseInt(payload[1], 16);
+
+                            if (status === 0) { // 响应正常
+                                isRunning.value = runningStatus === 1;
+                                ElMessage.success(`主机已${isRunning.value ? '开启' : '停止'}`);
+                            } else { // 响应异常
+                                ElMessage.error('主机响应异常');
+                            }
+                        }
+                    } else {
+                        // 非Slave2Backend包正常添加到日志
+                        logs.value.push(logEntry);
+                    }
                 }
             } else {
                 const hexData = Array.from(new Uint8Array(data))
@@ -895,35 +957,6 @@ export default {
             remotePort: '8080'
         });
 
-        // 添加开始/停止命令函数
-        const sendStartCommand = async () => {
-            if (!isConnected.value) {
-                ElMessage.warning('请先建立连接');
-                return;
-            }
-            const startCmd = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x03, 0x01]);
-            try {
-                await window.electronAPI.sendUdpData(startCmd);
-                ElMessage.success('已发送开始命令');
-            } catch (error) {
-                ElMessage.error('发送失败：' + error.message);
-            }
-        };
-
-        const sendStopCommand = async () => {
-            if (!isConnected.value) {
-                ElMessage.warning('请先建立连接');
-                return;
-            }
-            const stopCmd = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x03, 0x00]);
-            try {
-                await window.electronAPI.sendUdpData(stopCmd);
-                ElMessage.success('已发送停止命令');
-            } catch (error) {
-                ElMessage.error('发送失败：' + error.message);
-            }
-        };
-
         onMounted(() => {
             scanPorts();
             window.electronAPI.onSerialData(handleSerialData);
@@ -981,12 +1014,13 @@ export default {
             isConnected,
             handleSerialData,
             handleUdpData,
-            sendStartCommand,
-            sendStopCommand,
             slave2BackendLogs,
             slave2BackendLogsArray,
             offlineTimeout,
-            deviceOnlineStatus
+            deviceOnlineStatus,
+            isRunning,
+            isWaitingResponse,
+            handleCtrlCommand
         };
     }
 };
