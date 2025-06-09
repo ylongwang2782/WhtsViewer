@@ -36,7 +36,7 @@ jobs:
         run: |
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/ylongwang2782/SerialLogViewer.git
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/ylongwang2782/WhtsViewer.git
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
