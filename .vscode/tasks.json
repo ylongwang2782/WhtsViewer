@@ -1,0 +1,30 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "npm: build",
+            "type": "npm",
+            "script": "build",
+            "group": "build"
+        },
+        {
+            "label": "npm: electron:build",
+            "type": "npm",
+            "script": "electron:build",
+            "dependsOn": [
+                "npm: build"
+            ],
+            "group": "build"
+        },
+        {
+            "label": "build-and-run",
+            "type": "shell",
+            "command": "npm run build && npm run electron:dev",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
