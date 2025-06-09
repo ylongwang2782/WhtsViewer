@@ -1,6 +1,6 @@
 {
   "name": "whts-viewer",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A viewer for Whts protocol communication, supporting both serial port and UDP.",
   "main": "main.js",
   "scripts": {
