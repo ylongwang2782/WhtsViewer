@@ -121,7 +121,71 @@
                                         }">
                                         <el-table-column prop="lastUpdate" label="Last Update" width="100" />
                                         <el-table-column prop="slaveId" label="Slave ID" :width="tableConfig.columnWidths.slaveId" resizable />
-                                        <el-table-column prop="deviceStatus" label="Device Status" :width="tableConfig.columnWidths.deviceStatus" resizable />
+                                        <el-table-column label="Device Status" align="center">
+                                            <el-table-column prop="cs" label="CS" width="40" align="center">
+                                                <template #default="scope">
+                                                    <el-tag :type="scope.row.cs === '1' ? 'success' : 'danger'" size="small">
+                                                        {{ scope.row.cs }}
+                                                    </el-tag>
+                                                </template>
+                                            </el-table-column>
+                                            <el-table-column prop="sl" label="SL" width="40" align="center">
+                                                <template #default="scope">
+                                                    <el-tag :type="scope.row.sl === '1' ? 'success' : 'danger'" size="small">
+                                                        {{ scope.row.sl }}
+                                                    </el-tag>
+                                                </template>
+                                            </el-table-column>
+                                            <el-table-column prop="eub" label="EUB" width="40" align="center">
+                                                <template #default="scope">
+                                                    <el-tag :type="scope.row.eub === '1' ? 'success' : 'danger'" size="small">
+                                                        {{ scope.row.eub }}
+                                                    </el-tag>
+                                                </template>
+                                            </el-table-column>
+                                            <el-table-column prop="bla" label="BLA" width="40" align="center">
+                                                <template #default="scope">
+                                                    <el-tag :type="scope.row.bla === '1' ? 'success' : 'danger'" size="small">
+                                                        {{ scope.row.bla }}
+                                                    </el-tag>
+                                                </template>
+                                            </el-table-column>
+                                            <el-table-column prop="ps" label="PS" width="40" align="center">
+                                                <template #default="scope">
+                                                    <el-tag :type="scope.row.ps === '1' ? 'success' : 'danger'" size="small">
+                                                        {{ scope.row.ps }}
+                                                    </el-tag>
+                                                </template>
+                                            </el-table-column>
+                                            <el-table-column prop="el1" label="EL1" width="40" align="center">
+                                                <template #default="scope">
+                                                    <el-tag :type="scope.row.el1 === '1' ? 'success' : 'danger'" size="small">
+                                                        {{ scope.row.el1 }}
+                                                    </el-tag>
+                                                </template>
+                                            </el-table-column>
+                                            <el-table-column prop="el2" label="EL2" width="40" align="center">
+                                                <template #default="scope">
+                                                    <el-tag :type="scope.row.el2 === '1' ? 'success' : 'danger'" size="small">
+                                                        {{ scope.row.el2 }}
+                                                    </el-tag>
+                                                </template>
+                                            </el-table-column>
+                                            <el-table-column prop="a1" label="A1" width="40" align="center">
+                                                <template #default="scope">
+                                                    <el-tag :type="scope.row.a1 === '1' ? 'success' : 'danger'" size="small">
+                                                        {{ scope.row.a1 }}
+                                                    </el-tag>
+                                                </template>
+                                            </el-table-column>
+                                            <el-table-column prop="a2" label="A2" width="40" align="center">
+                                                <template #default="scope">
+                                                    <el-tag :type="scope.row.a2 === '1' ? 'success' : 'danger'" size="small">
+                                                        {{ scope.row.a2 }}
+                                                    </el-tag>
+                                                </template>
+                                            </el-table-column>
+                                        </el-table-column>
                                         <el-table-column prop="context" label="Conduction Data" :width="tableConfig.columnWidths.context" resizable />
                                     </el-table>
                                 </div>
@@ -430,7 +494,22 @@ export default {
             return Array.from(slave2BackendLogs.value.values());
         });
 
-        // 修改handleUdpData函数
+        // 添加设备状态位解析函数
+        const parseDeviceStatus = (status) => {
+            return {
+                cs: (status & 0x0001) ? '1' : '0',      // Color Sensor
+                sl: (status & 0x0002) ? '1' : '0',      // Sleeve Limit
+                eub: (status & 0x0004) ? '1' : '0',     // Electromagnet Unlock Button
+                bla: (status & 0x0008) ? '1' : '0',     // Battery Low Alarm
+                ps: (status & 0x0010) ? '1' : '0',      // Pressure Sensor
+                el1: (status & 0x0020) ? '1' : '0',     // Electromagnetic Lock1
+                el2: (status & 0x0040) ? '1' : '0',     // Electromagnetic Lock2
+                a1: (status & 0x0080) ? '1' : '0',      // Accessory1
+                a2: (status & 0x0100) ? '1' : '0'       // Accessory2
+            };
+        };
+
+        // 修改handleUdpData函数中处理Slave2Backend的部分
         const handleUdpData = (event, { data }) => {
             console.log('UDP data received:', data);
             
@@ -442,15 +521,17 @@ export default {
                     slaveId: whtsFrame.slaveId || '--',
                     deviceStatus: whtsFrame.deviceStatus || '--',
                     context: whtsFrame.msgType ? whtsFrame.msgPayload : whtsFrame.payload,
-                    timestamp: new Date().toLocaleTimeString() // 添加时间戳
+                    timestamp: new Date().toLocaleTimeString()
                 };
 
-                // 处理Slave2Backend包
                 if (whtsFrame.packetId === 0x04) {
-                    // 更新Slave2Backend专用表格
+                    // 解析设备状态位
+                    const deviceStatusBits = parseDeviceStatus(parseInt(whtsFrame.deviceStatus.slice(2), 16));
+                    
                     slave2BackendLogs.value.set(whtsFrame.slaveId, {
                         ...logEntry,
-                        lastUpdate: new Date().toLocaleTimeString()
+                        lastUpdate: new Date().toLocaleTimeString(),
+                        ...deviceStatusBits  // 展开设备状态位
                     });
 
                     // 对于CONDUCTION_DATA_MSG，更新而不是追加到主日志
@@ -546,7 +627,7 @@ export default {
                 slaveId = bytes[8] | (bytes[9] << 8) | (bytes[10] << 16) | (bytes[11] << 24);
                 
                 // 解析Device Status (2字节)
-                deviceStatus = (bytes[12] << 8) | bytes[13];
+                deviceStatus = bytes[12] | (bytes[13] << 8);
                 
                 if (messageId === 0x00) { // CONDUCTION_DATA_MSG
                     // 解析导通数据长度（2字节）
@@ -1083,5 +1164,10 @@ export default {
 
 .el-tab-pane {
     height: 100%;
+}
+
+.el-tag--small {
+    margin: 0;
+    padding: 0 2px;
 }
 </style>
