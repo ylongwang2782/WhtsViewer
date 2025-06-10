@@ -279,6 +279,177 @@
                     </el-form>
                 </div>
             </el-dialog>
+
+            <!-- 从机配置对话框 -->
+            <el-dialog v-model="configDialogVisible" title="从机配置管理" width="80%">
+                <el-form :model="currentConfig" label-width="120px">
+                    <el-form-item label="配置名称">
+                        <el-input v-model="currentConfig.name" placeholder="请输入配置名称" />
+                    </el-form-item>
+                    
+                    <div v-for="(slave, index) in currentConfig.slaves" :key="index" class="slave-config-item">
+                        <el-divider>从机 {{index + 1}}</el-divider>
+                        <el-row :gutter="20">
+                            <el-col :span="8">
+                                <el-form-item :label="'从机ID'" :rules="[
+                                    { required: true, message: '请输入从机ID' },
+                                    { validator: (rule, value, callback) => {
+                                        if (!validateHex(value, 8)) {
+                                            callback(new Error('请输入8位十六进制数（例如：46733B4E）'));
+                                        } else {
+                                            callback();
+                                        }
+                                    }}
+                                ]">
+                                    <el-input 
+                                        v-model="slave.id" 
+                                        placeholder="8位十六进制数（例如：46733B4E）"
+                                        @input="value => slave.id = value.toUpperCase()"
+                                        maxlength="8"
+                                    />
+                                </el-form-item>
+                            </el-col>
+                            <el-col :span="4">
+                                <el-form-item label="导通检测数量" :rules="[
+                                    { required: true, message: '请输入导通检测数量' },
+                                    { validator: (rule, value, callback) => {
+                                        if (!validateHex(value, 2)) {
+                                            callback(new Error('请输入2位十六进制数'));
+                                        } else {
+                                            callback();
+                                        }
+                                    }}
+                                ]">
+                                    <el-input 
+                                        v-model="slave.conductionNum"
+                                        placeholder="2位十六进制数"
+                                        @input="value => slave.conductionNum = value.toUpperCase()"
+                                        maxlength="2"
+                                    />
+                                </el-form-item>
+                            </el-col>
+                            <el-col :span="4">
+                                <el-form-item label="阻值检测数量" :rules="[
+                                    { required: true, message: '请输入阻值检测数量' },
+                                    { validator: (rule, value, callback) => {
+                                        if (!validateHex(value, 2)) {
+                                            callback(new Error('请输入2位十六进制数'));
+                                        } else {
+                                            callback();
+                                        }
+                                    }}
+                                ]">
+                                    <el-input 
+                                        v-model="slave.resistanceNum"
+                                        placeholder="2位十六进制数"
+                                        @input="value => slave.resistanceNum = value.toUpperCase()"
+                                        maxlength="2"
+                                    />
+                                </el-form-item>
+                            </el-col>
+                            <el-col :span="4">
+                                <el-form-item label="卡钉检测模式" :rules="[
+                                    { required: true, message: '请输入卡钉检测模式' },
+                                    { validator: (rule, value, callback) => {
+                                        if (!validateHex(value, 2)) {
+                                            callback(new Error('请输入2位十六进制数'));
+                                        } else {
+                                            callback();
+                                        }
+                                    }}
+                                ]">
+                                    <el-input 
+                                        v-model="slave.clipMode"
+                                        placeholder="2位十六进制数"
+                                        @input="value => slave.clipMode = value.toUpperCase()"
+                                        maxlength="2"
+                                    />
+                                </el-form-item>
+                            </el-col>
+                            <el-col :span="4">
+                                <el-form-item label="卡钉初始化状态" :rules="[
+                                    { required: true, message: '请输入卡钉初始化状态' },
+                                    { validator: (rule, value, callback) => {
+                                        if (!validateHex(value, 4)) {
+                                            callback(new Error('请输入4位十六进制数'));
+                                        } else {
+                                            callback();
+                                        }
+                                    }}
+                                ]">
+                                    <el-input 
+                                        v-model="slave.clipStatus"
+                                        placeholder="4位十六进制数"
+                                        @input="value => slave.clipStatus = value.toUpperCase()"
+                                        maxlength="4"
+                                    />
+                                </el-form-item>
+                            </el-col>
+                        </el-row>
+                        <el-button type="danger" @click="removeSlave(index)" :disabled="currentConfig.slaves.length === 1">
+                            删除从机
+                        </el-button>
+                    </div>
+                    
+                    <el-button type="primary" @click="addSlave">添加从机</el-button>
+                </el-form>
+                <template #footer>
+                    <el-button @click="configDialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="saveConfig">保存配置</el-button>
+                </template>
+            </el-dialog>
+
+            <!-- 添加配置管理按钮和配置列表 -->
+            <el-row :gutter="20" class="mb-20">
+                <el-col :span="24">
+                    <el-card>
+                        <template #header>
+                            <div class="card-header">
+                                <span>从机配置管理</span>
+                                <el-button type="primary" @click="configDialogVisible = true">新建配置</el-button>
+                            </div>
+                        </template>
+                        <el-table :data="slaveConfigs" style="width: 100%">
+                            <el-table-column prop="name" label="配置名称" />
+                            <el-table-column label="从机数量" width="100">
+                                <template #default="scope">
+                                    {{ scope.row.slaves.length }}
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="从机配置" min-width="300">
+                                <template #default="scope">
+                                    <div v-for="(slave, index) in scope.row.slaves" :key="index" class="slave-config-info">
+                                        从机{{ index + 1 }}: ID={{ slave.id }}, 
+                                        导通={{ slave.conductionNum }}, 
+                                        阻值={{ slave.resistanceNum }}, 
+                                        卡钉模式={{ slave.clipMode }}, 
+                                        卡钉状态={{ slave.clipStatus }}
+                                    </div>
+                                </template>
+                            </el-table-column>
+                            <el-table-column label="操作" width="200">
+                                <template #default="scope">
+                                    <el-button size="small" @click="sendSlaveConfig(scope.row)">发送</el-button>
+                                    <el-button 
+                                        size="small" 
+                                        type="primary" 
+                                        @click="editConfig(scope.row)"
+                                    >
+                                        编辑
+                                    </el-button>
+                                    <el-button 
+                                        size="small" 
+                                        type="danger" 
+                                        @click="deleteConfig(scope.$index)"
+                                    >
+                                        删除
+                                    </el-button>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                    </el-card>
+                </el-col>
+            </el-row>
         </el-container>
     </div>
 </template>
@@ -892,6 +1063,8 @@ export default {
 
             try {
                 const hexArray = new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                // 添加日志输出
+                console.log('发送十六进制命令:', Array.from(hexArray).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '));
 
                 if (communicationType.value === 'serial') {
                     await window.electronAPI.writePort(hexArray);
@@ -957,11 +1130,163 @@ export default {
             remotePort: '8080'
         });
 
+        // 添加SLAVE_CFG_MSG配置管理
+        const slaveConfigs = ref([]);  // 保存所有配置
+        const configDialogVisible = ref(false);
+        const currentConfig = ref({
+            name: '',
+            slaves: [
+                {
+                    id: '00000000',
+                    conductionNum: '00',      // 1字节
+                    resistanceNum: '00',      // 1字节
+                    clipMode: '00',           // 1字节
+                    clipStatus: '0000'        // 2字节
+                }
+            ]
+        });
+
+        // 加载保存的配置
+        const loadSavedConfigs = () => {
+            const savedConfigs = localStorage.getItem('slaveConfigs');
+            if (savedConfigs) {
+                slaveConfigs.value = JSON.parse(savedConfigs);
+            }
+        };
+
+        // 添加十六进制验证函数
+        const validateHex = (value, length) => {
+            const hexPattern = new RegExp(`^[0-9A-Fa-f]{${length}}$`);
+            return hexPattern.test(value);
+        };
+
+        // 修改生成消息的函数
+        const generateSlaveConfigMessage = (config) => {
+            const data = [];
+            
+            // Message ID (SLAVE_CFG_MSG = 0x00) 先加入，这样它也会被计入长度
+            data.push(0x00);
+            
+            // Slave数量
+            data.push(config.slaves.length);
+            
+            config.slaves.forEach(slave => {
+                // Slave ID (4 bytes)
+                const idBytes = [];
+                for (let i = 0; i < 8; i += 2) {
+                    idBytes.push(parseInt(slave.id.slice(i, i + 2), 16));
+                }
+                // 小端序，需要反转字节顺序
+                data.push(...idBytes.reverse());
+                
+                // Conduction Num (1 byte)
+                data.push(parseInt(slave.conductionNum, 16));
+                
+                // Resistance Num (1 byte)
+                data.push(parseInt(slave.resistanceNum, 16));
+                
+                // Clip Mode (1 byte)
+                data.push(parseInt(slave.clipMode, 16));
+                
+                // Clip Status (2 bytes, little endian)
+                const statusValue = parseInt(slave.clipStatus, 16);
+                data.push(statusValue & 0xFF);
+                data.push((statusValue >> 8) & 0xFF);
+            });
+            
+            // 计算总长度（包含Message ID）
+            const messageLength = data.length;
+            
+            // 构建完整消息
+            const fullMessage = [
+                0xAB, 0xCD,         // Frame Header
+                0x02,               // Packet ID (Backend2Master)
+                0x00, 0x00,         // Sequence & Flag
+                messageLength, 0x00, // Length (little endian)
+                ...data             // Message ID + Payload
+            ];
+            
+            return new Uint8Array(fullMessage);
+        };
+
+        // 修改保存配置前的验证
+        const saveConfig = () => {
+            if (!currentConfig.value.name) {
+                ElMessage.warning('请输入配置名称');
+                return;
+            }
+            
+            // 验证所有从机ID格式
+            for (const slave of currentConfig.value.slaves) {
+                if (!validateHex(slave.id, 8)) {
+                    ElMessage.warning('从机ID必须是8位十六进制数（例如：46733B4E）');
+                    return;
+                }
+            }
+            
+            const existingIndex = slaveConfigs.value.findIndex(config => config.name === currentConfig.value.name);
+            if (existingIndex !== -1) {
+                slaveConfigs.value[existingIndex] = { ...currentConfig.value };
+            } else {
+                slaveConfigs.value.push({ ...currentConfig.value });
+            }
+            
+            localStorage.setItem('slaveConfigs', JSON.stringify(slaveConfigs.value));
+            configDialogVisible.value = false;
+            ElMessage.success('配置已保存');
+        };
+
+        // 修改添加从机函数
+        const addSlave = () => {
+            currentConfig.value.slaves.push({
+                id: '00000000',
+                conductionNum: '00',
+                resistanceNum: '00',
+                clipMode: '00',
+                clipStatus: '0000'
+            });
+        };
+
+        // 删除从机配置
+        const removeSlave = (index) => {
+            currentConfig.value.slaves.splice(index, 1);
+        };
+
+        // 发送配置
+        const sendSlaveConfig = async (config) => {
+            if (!isConnected.value) {
+                ElMessage.warning('请先建立连接');
+                return;
+            }
+            
+            try {
+                const message = generateSlaveConfigMessage(config);
+                // 添加日志输出
+                console.log('发送从机配置:', Array.from(message).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '));
+                await window.electronAPI.sendUdpData(message);
+                ElMessage.success('配置已发送');
+            } catch (error) {
+                ElMessage.error('发送失败：' + error.message);
+            }
+        };
+
+        // 添加编辑和删除函数
+        const editConfig = (config) => {
+            currentConfig.value = JSON.parse(JSON.stringify(config));
+            configDialogVisible.value = true;
+        };
+
+        const deleteConfig = (index) => {
+            slaveConfigs.value.splice(index, 1);
+            localStorage.setItem('slaveConfigs', JSON.stringify(slaveConfigs.value));
+        };
+
         onMounted(() => {
             scanPorts();
             window.electronAPI.onSerialData(handleSerialData);
             window.electronAPI.onUdpData(handleUdpData);
             loadTableConfig();
+            loadSavedConfigs();
             offlineCheckTimer = setInterval(checkDeviceStatus, 1000); // 每秒检查一次
         });
 
@@ -1020,7 +1345,16 @@ export default {
             deviceOnlineStatus,
             isRunning,
             isWaitingResponse,
-            handleCtrlCommand
+            handleCtrlCommand,
+            configDialogVisible,
+            currentConfig,
+            slaveConfigs,
+            addSlave,
+            removeSlave,
+            saveConfig,
+            sendSlaveConfig,
+            editConfig,
+            deleteConfig
         };
     }
 };
@@ -1270,5 +1604,26 @@ export default {
     padding: 10px;
     border-radius: 4px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.slave-config-item {
+    margin-bottom: 20px;
+    padding: 20px;
+    border: 1px solid #EBEEF5;
+    border-radius: 4px;
+}
+
+.slave-config-info {
+    margin: 5px 0;
+    font-family: monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 </style>
