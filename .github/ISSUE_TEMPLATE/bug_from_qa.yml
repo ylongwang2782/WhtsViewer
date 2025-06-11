@@ -1,71 +1,56 @@
-name: 🧪 QA Bug 提交
-description: 内部测试人员使用此模板提 Bug
-title: "[Bug] 模块名称 - 简要问题描述"
-labels: [bug, from-QA]
-body:
-  - type: dropdown
-    id: priority
-    attributes:
-      label: 问题优先级
-      options:
-        - P0 - 阻塞测试或影响主功能
-        - P1 - 功能异常但可绕过
-        - P2 - 轻微问题/不影响主流程
-      default: 1
-    validations:
-      required: true
+---
+name: 🐞 Bug 报告
+about: 提交一个 Bug 报告，以帮助我们改进项目
+title: "[Bug] 简要描述问题"
+labels: bug
+assignees: ''
 
-  - type: dropdown
-    id: module
-    attributes:
-      label: 所属模块
-      options:
-        - 主机
-        - 从机
-        - 系统
-        - 其他
-    validations:
-      required: true
+---
 
-  - type: input
-    id: env
-    attributes:
-      label: 测试环境
-      placeholder: 如：版本 v1.2.3，Windows 11 + Chrome 124
-    validations:
-      required: true
+### 🐞 Bug 描述
 
-  - type: textarea
-    id: steps
-    attributes:
-      label: 复现步骤
-      placeholder: |
-        1. 打开应用
-        2. 点击“提交”
-        3. 程序崩溃
-      render: text
-    validations:
-      required: true
+简洁明了地描述你遇到的问题。
 
-  - type: textarea
-    id: expected
-    attributes:
-      label: 预期结果
-      placeholder: 应该成功保存数据，提示“提交成功”
-    validations:
-      required: true
+> 示例：“点击登录按钮无响应，控制台报错 `TypeError: xxx`。”
 
-  - type: textarea
-    id: actual
-    attributes:
-      label: 实际结果
-      placeholder: 无响应，控制台报错“null pointer”
-    validations:
-      required: true
+---
 
-  - type: textarea
-    id: evidence
-    attributes:
-      label: 相关附件（日志/截图/视频）
-      description: 可粘贴日志或截图，也可以上传文件
-      placeholder: 粘贴内容或使用右上角“附件”上传
+### ✅ 复现步骤
+
+请提供复现该问题的详细步骤：
+
+1. 进入页面 '...'
+2. 点击 '...'
+3. 滚动到 '...'
+4. 发现问题 '...'
+
+---
+
+### 🧩 预期行为
+
+请描述你原本期望看到的正确结果。
+
+---
+
+### 📸 截图（可选）
+
+如果适用，请附上截图以帮助我们理解问题。
+
+---
+
+### 💻 运行环境
+
+请填写与问题相关的环境信息：
+
+- 操作系统：如 Windows 10 / macOS 14 / Ubuntu 22.04
+- 浏览器或平台：如 Chrome 124 / Electron / Node.js 版本
+- 项目版本或 Git 分支：如 `dev` 分支，commit `abc1234`
+
+---
+
+### 📋 补充信息（可选）
+
+如有更多补充信息，请在此提供。
+
+---
+
