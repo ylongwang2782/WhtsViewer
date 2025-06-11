@@ -489,7 +489,7 @@
 
 <script>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElLoading } from 'element-plus';
 import packageInfo from '../package.json';  // 导入package.json获取版本号
 
 export default {
@@ -800,7 +800,7 @@ export default {
             }
         };
 
-        // 修改handleUdpData函数，添加对Master2Backend Ctrl Message的处理
+        // 修改handleUdpData函数，添加配置响应处理
         const handleUdpData = (event, { data }) => {
             console.log('UDP data received:', data);
             
@@ -815,106 +815,188 @@ export default {
                     timestamp: new Date().toLocaleTimeString()
                 };
 
-                if (whtsFrame.packetId === 0x04) {
-                    const deviceStatusBits = parseDeviceStatus(parseInt(whtsFrame.deviceStatus.slice(2), 16));
-                    
-                    // 更新设备最后通信时间
-                    deviceLastUpdateTime.value.set(whtsFrame.slaveId, Date.now());
-                    deviceOnlineStatus.value.set(whtsFrame.slaveId, true);
-                    
-                    slave2BackendLogs.value.set(whtsFrame.slaveId, {
-                        ...logEntry,
-                        lastUpdate: new Date().toLocaleTimeString(),
-                        ...deviceStatusBits,
-                        isOffline: false
-                    });
+                // 处理从机配置响应
+                if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'SLAVE_CFG_MSG') {
+                    if (window._clearConfigTimeout) {
+                        window._clearConfigTimeout();
+                    }
 
-                    // 对于CONDUCTION_DATA_MSG，更新而不是追加到主日志
-                    if (whtsFrame.msgType === 'CONDUCTION_DATA_MSG') {
-                        // 查找并更新现有的CONDUCTION_DATA_MSG条目
-                        const existingIndex = logs.value.findIndex(log => 
-                            log.slaveId === whtsFrame.slaveId && 
-                            log.message === 'CONDUCTION_DATA_MSG'
-                        );
+                    const payload = new Uint8Array(data).slice(8); // 跳过帧头和长度等字段
+                    const status = payload[0];
+                    const slaveNum = payload[1];
+                    
+                    if (status === 0) {
+                        ElMessage.success('从机配置成功');
                         
-                        if (existingIndex !== -1) {
-                            // 更新现有条目
-                            logs.value[existingIndex] = logEntry;
+                        // 验证响应数据
+                        let isValid = true;
+                        let offset = 2; // 跳过status和slaveNum
+                        
+                        if (window._currentSendingConfig && window._currentSendingConfig.slaves.length === slaveNum) {
+                            for (const configSlave of window._currentSendingConfig.slaves) {
+                                // 验证从机ID (4字节，小端)
+                                const idBytes = payload.slice(offset, offset + 4);
+                                const responseId = Array.from(idBytes)
+                                    .map(b => b.toString(16).padStart(2, '0'))
+                                    .join('')
+                                    .toUpperCase();
+                                offset += 4;
+
+                                // 验证其他参数
+                                const responseConductionNum = payload[offset].toString(16).padStart(2, '0').toUpperCase();
+                                const responseResistanceNum = payload[offset + 1].toString(16).padStart(2, '0').toUpperCase();
+                                const responseClipMode = payload[offset + 2].toString(16).padStart(2, '0').toUpperCase();
+                                const responseClipStatus = (payload[offset + 3] | (payload[offset + 4] << 8))
+                                    .toString(16).padStart(4, '0').toUpperCase();
+                                offset += 5;
+
+                                // 调试输出
+                                console.log('Response validation:', {
+                                    'Config ID': configSlave.id,
+                                    'Response ID': responseId,
+                                    'Config ConductionNum': configSlave.conductionNum,
+                                    'Response ConductionNum': responseConductionNum,
+                                    'Config ResistanceNum': configSlave.resistanceNum,
+                                    'Response ResistanceNum': responseResistanceNum,
+                                    'Config ClipMode': configSlave.clipMode,
+                                    'Response ClipMode': responseClipMode,
+                                    'Config ClipStatus': configSlave.clipStatus,
+                                    'Response ClipStatus': responseClipStatus
+                                });
+
+                                // 将配置ID转换为与响应格式相同的格式
+                                const configIdBytes = [];
+                                for (let i = 0; i < 8; i += 2) {
+                                    configIdBytes.push(parseInt(configSlave.id.slice(i, i + 2), 16));
+                                }
+                                const normalizedConfigId = configIdBytes
+                                    .map(b => b.toString(16).padStart(2, '0'))
+                                    .join('')
+                                    .toUpperCase();
+
+                                if (normalizedConfigId !== responseId ||
+                                    configSlave.conductionNum !== responseConductionNum ||
+                                    configSlave.resistanceNum !== responseResistanceNum ||
+                                    configSlave.clipMode !== responseClipMode ||
+                                    configSlave.clipStatus !== responseClipStatus) {
+                                    console.log('Mismatch found:', {
+                                        'ID match': normalizedConfigId === responseId,
+                                        'ConductionNum match': configSlave.conductionNum === responseConductionNum,
+                                        'ResistanceNum match': configSlave.resistanceNum === responseResistanceNum,
+                                        'ClipMode match': configSlave.clipMode === responseClipMode,
+                                        'ClipStatus match': configSlave.clipStatus === responseClipStatus
+                                    });
+                                    isValid = false;
+                                    break;
+                                }
+                            }
                         } else {
-                            // 如果不存在，则添加新条目
-                            logs.value.push(logEntry);
+                            console.log('Slave count mismatch:', {
+                                'Config slave count': window._currentSendingConfig?.slaves.length,
+                                'Response slave count': slaveNum
+                            });
+                            isValid = false;
                         }
+                        
+                        if (!isValid) {
+                            ElMessage.warning('配置响应数据与发送不匹配，请检查配置');
+                        }
+                    } else {
+                        ElMessage.error('从机配置失败');
+                    }
+                }
+                
+                // 处理设备列表响应
+                else if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'DEVICE_LIST_RSP_MSG') {
+                    const payload = new Uint8Array(data).slice(8); // 跳过帧头和长度等字段
+                    const deviceCount = payload[0];
+                    const devices = [];
+
+                    let offset = 1; // 跳过设备数量字段
+                    for (let i = 0; i < deviceCount; i++) {
+                        // 解析设备ID (4字节，小端)
+                        const deviceIdBytes = payload.slice(offset, offset + 4);
+                        const deviceId = Array.from(deviceIdBytes).reverse()
+                            .map(b => b.toString(16).padStart(2, '0')).join('');
+                        offset += 4;
+
+                        // 解析短ID (1字节)
+                        const shortId = payload[offset];
+                        offset += 1;
+
+                        // 解析在线状态 (1字节)
+                        const online = payload[offset] === 1;
+                        offset += 1;
+
+                        // 解析版本号
+                        const versionMajor = payload[offset];
+                        const versionMinor = payload[offset + 1];
+                        // 补丁版本号 (2字节，小端)
+                        const versionPatch = payload[offset + 2] | (payload[offset + 3] << 8);
+                        offset += 4;
+
+                        devices.push({
+                            deviceId,
+                            shortId,
+                            online,
+                            versionMajor,
+                            versionMinor,
+                            versionPatch,
+                            lastUpdate: new Date().toLocaleString()
+                        });
+                    }
+
+                    deviceList.value = devices;
+                    ElMessage.success(`查询到 ${deviceCount} 个设备`);
+                }
+                
+                // 处理其他消息
+                else {
+                    // 处理设备列表响应
+                    if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'DEVICE_LIST_RSP_MSG') {
+                        const payload = new Uint8Array(data).slice(8); // 跳过帧头和长度等字段
+                        const deviceCount = payload[0];
+                        const devices = [];
+
+                        let offset = 1; // 跳过设备数量字段
+                        for (let i = 0; i < deviceCount; i++) {
+                            // 解析设备ID (4字节，小端)
+                            const deviceIdBytes = payload.slice(offset, offset + 4);
+                            const deviceId = Array.from(deviceIdBytes).reverse()
+                                .map(b => b.toString(16).padStart(2, '0')).join('');
+                            offset += 4;
+
+                            // 解析短ID (1字节)
+                            const shortId = payload[offset];
+                            offset += 1;
+
+                            // 解析在线状态 (1字节)
+                            const online = payload[offset] === 1;
+                            offset += 1;
+
+                            // 解析版本号
+                            const versionMajor = payload[offset];
+                            const versionMinor = payload[offset + 1];
+                            // 补丁版本号 (2字节，小端)
+                            const versionPatch = payload[offset + 2] | (payload[offset + 3] << 8);
+                            offset += 4;
+
+                            devices.push({
+                                deviceId,
+                                shortId,
+                                online,
+                                versionMajor,
+                                versionMinor,
+                                versionPatch,
+                                lastUpdate: new Date().toLocaleString()
+                            });
+                        }
+
+                        deviceList.value = devices;
+                        ElMessage.success(`查询到 ${deviceCount} 个设备`);
                     } else {
                         // 其他类型的Slave2Backend消息正常添加
                         logs.value.push(logEntry);
-                    }
-                } else {
-                    // 处理Master2Backend的Ctrl Message响应
-                    if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'CTRL_MSG' && isWaitingResponse.value) {
-                        isWaitingResponse.value = false;
-                        if (responseTimeout.value) {
-                            clearTimeout(responseTimeout.value);
-                        }
-
-                        const payload = whtsFrame.msgPayload.split(' ');
-                        if (payload.length >= 2) {
-                            const status = parseInt(payload[0], 16);
-                            const runningStatus = parseInt(payload[1], 16);
-
-                            if (status === 0) { // 响应正常
-                                isRunning.value = runningStatus === 1;
-                                ElMessage.success(`主机已${isRunning.value ? '开启' : '停止'}`);
-                            } else { // 响应异常
-                                ElMessage.error('主机响应异常');
-                            }
-                        }
-                    } else {
-                        // 处理设备列表响应
-                        if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'DEVICE_LIST_RSP_MSG') {
-                            const payload = new Uint8Array(data).slice(8); // 跳过帧头和长度等字段
-                            const deviceCount = payload[0];
-                            const devices = [];
-
-                            let offset = 1; // 跳过设备数量字段
-                            for (let i = 0; i < deviceCount; i++) {
-                                // 解析设备ID (4字节，小端)
-                                const deviceIdBytes = payload.slice(offset, offset + 4);
-                                const deviceId = Array.from(deviceIdBytes).reverse()
-                                    .map(b => b.toString(16).padStart(2, '0')).join('');
-                                offset += 4;
-
-                                // 解析短ID (1字节)
-                                const shortId = payload[offset];
-                                offset += 1;
-
-                                // 解析在线状态 (1字节)
-                                const online = payload[offset] === 1;
-                                offset += 1;
-
-                                // 解析版本号
-                                const versionMajor = payload[offset];
-                                const versionMinor = payload[offset + 1];
-                                // 补丁版本号 (2字节，小端)
-                                const versionPatch = payload[offset + 2] | (payload[offset + 3] << 8);
-                                offset += 4;
-
-                                devices.push({
-                                    deviceId,
-                                    shortId,
-                                    online,
-                                    versionMajor,
-                                    versionMinor,
-                                    versionPatch,
-                                    lastUpdate: new Date().toLocaleString()
-                                });
-                            }
-
-                            deviceList.value = devices;
-                            ElMessage.success(`查询到 ${deviceCount} 个设备`);
-                        } else {
-                            // 非Slave2Backend包正常添加到日志
-                            logs.value.push(logEntry);
-                        }
                     }
                 }
             } else {
@@ -1337,7 +1419,7 @@ export default {
             currentConfig.value.slaves.splice(index, 1);
         };
 
-        // 发送配置
+        // 修改发送配置函数，添加等待响应状态
         const sendSlaveConfig = async (config) => {
             if (!isConnected.value) {
                 ElMessage.warning('请先建立连接');
@@ -1346,10 +1428,32 @@ export default {
             
             try {
                 const message = generateSlaveConfigMessage(config);
-                // 添加日志输出
                 console.log('发送从机配置:', Array.from(message).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '));
+                
+                // 设置加载状态
+                const loadingInstance = ElLoading.service({
+                    target: '.config-table-container',
+                    text: '等待配置响应...'
+                });
+                
+                // 设置超时定时器
+                const timeoutTimer = setTimeout(() => {
+                    loadingInstance.close();
+                    ElMessage.error('配置响应超时');
+                }, 3000);
+                
+                // 保存当前配置以供响应处理使用
+                window._currentSendingConfig = config;
+                
                 await window.electronAPI.sendUdpData(message);
-                ElMessage.success('配置已发送');
+                
+                // 清除超时定时器的函数将在响应处理中调用
+                window._clearConfigTimeout = () => {
+                    clearTimeout(timeoutTimer);
+                    loadingInstance.close();
+                    delete window._currentSendingConfig;
+                    delete window._clearConfigTimeout;
+                };
             } catch (error) {
                 ElMessage.error('发送失败：' + error.message);
             }
