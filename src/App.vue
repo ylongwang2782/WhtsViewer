@@ -217,7 +217,7 @@
                         <el-tab-pane label="从机配置">
                             <div class="config-management-container">
                                 <div class="config-header mb-20">
-                                    <el-button type="primary" @click="configDialogVisible = true">新建配置</el-button>
+                                    <el-button type="primary" @click="showNewConfigDialog">新建配置</el-button>
                                 </div>
                                 <div class="config-table-container">
                                     <el-table :data="slaveConfigs" style="width: 100%" border>
@@ -1211,18 +1211,22 @@ export default {
         // 添加SLAVE_CFG_MSG配置管理
         const slaveConfigs = ref([]);  // 保存所有配置
         const configDialogVisible = ref(false);
-        const currentConfig = ref({
-            name: '',
-            slaves: [
-                {
-                    id: '00000000',
-                    conductionNum: '00',      // 1字节
-                    resistanceNum: '00',      // 1字节
-                    clipMode: '00',           // 1字节
-                    clipStatus: '0000'        // 2字节
-                }
-            ]
-        });
+        const createEmptyConfig = () => {
+            return {
+                name: '',
+                slaves: [
+                    {
+                        id: '00000000',
+                        conductionNum: '00',
+                        resistanceNum: '00',
+                        clipMode: '00',
+                        clipStatus: '0000'
+                    }
+                ]
+            };
+        };
+
+        const currentConfig = ref(createEmptyConfig());
 
         // 加载保存的配置
         const loadSavedConfigs = () => {
@@ -1302,11 +1306,14 @@ export default {
                 }
             }
             
-            const existingIndex = slaveConfigs.value.findIndex(config => config.name === currentConfig.value.name);
+            // 创建配置的深拷贝
+            const configToSave = JSON.parse(JSON.stringify(currentConfig.value));
+            
+            const existingIndex = slaveConfigs.value.findIndex(config => config.name === configToSave.name);
             if (existingIndex !== -1) {
-                slaveConfigs.value[existingIndex] = { ...currentConfig.value };
+                slaveConfigs.value[existingIndex] = configToSave;
             } else {
-                slaveConfigs.value.push({ ...currentConfig.value });
+                slaveConfigs.value.push(configToSave);
             }
             
             localStorage.setItem('slaveConfigs', JSON.stringify(slaveConfigs.value));
@@ -1348,8 +1355,9 @@ export default {
             }
         };
 
-        // 添加编辑和删除函数
+        // 修改编辑配置函数
         const editConfig = (config) => {
+            // 创建配置的深拷贝
             currentConfig.value = JSON.parse(JSON.stringify(config));
             configDialogVisible.value = true;
         };
@@ -1377,6 +1385,11 @@ export default {
             } catch (error) {
                 ElMessage.error('发送失败：' + error.message);
             }
+        };
+
+        const showNewConfigDialog = () => {
+            currentConfig.value = createEmptyConfig();
+            configDialogVisible.value = true;
         };
 
         onMounted(() => {
@@ -1454,7 +1467,8 @@ export default {
             editConfig,
             deleteConfig,
             deviceList,
-            queryDeviceList
+            queryDeviceList,
+            showNewConfigDialog
         };
     }
 };
