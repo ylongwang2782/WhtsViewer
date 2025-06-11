@@ -214,6 +214,53 @@
                                 </div>
                             </div>
                         </el-tab-pane>
+                        <el-tab-pane label="从机配置">
+                            <div class="config-management-container">
+                                <div class="config-header mb-20">
+                                    <el-button type="primary" @click="configDialogVisible = true">新建配置</el-button>
+                                </div>
+                                <div class="config-table-container">
+                                    <el-table :data="slaveConfigs" style="width: 100%" border>
+                                        <el-table-column prop="name" label="配置名称" />
+                                        <el-table-column label="从机数量" width="100">
+                                            <template #default="scope">
+                                                {{ scope.row.slaves.length }}
+                                            </template>
+                                        </el-table-column>
+                                        <el-table-column label="从机配置" min-width="300">
+                                            <template #default="scope">
+                                                <div v-for="(slave, index) in scope.row.slaves" :key="index" class="slave-config-info">
+                                                    从机{{ index + 1 }}: ID={{ slave.id }}, 
+                                                    导通={{ slave.conductionNum }}, 
+                                                    阻值={{ slave.resistanceNum }}, 
+                                                    卡钉模式={{ slave.clipMode }}, 
+                                                    卡钉状态={{ slave.clipStatus }}
+                                                </div>
+                                            </template>
+                                        </el-table-column>
+                                        <el-table-column label="操作" width="200" fixed="right">
+                                            <template #default="scope">
+                                                <el-button size="small" @click="sendSlaveConfig(scope.row)">发送</el-button>
+                                                <el-button 
+                                                    size="small" 
+                                                    type="primary" 
+                                                    @click="editConfig(scope.row)"
+                                                >
+                                                    编辑
+                                                </el-button>
+                                                <el-button 
+                                                    size="small" 
+                                                    type="danger" 
+                                                    @click="deleteConfig(scope.$index)"
+                                                >
+                                                    删除
+                                                </el-button>
+                                            </template>
+                                        </el-table-column>
+                                    </el-table>
+                                </div>
+                            </div>
+                        </el-tab-pane>
                     </el-tabs>
                 </div>
             </el-main>
@@ -398,58 +445,6 @@
                     <el-button type="primary" @click="saveConfig">保存配置</el-button>
                 </template>
             </el-dialog>
-
-            <!-- 添加配置管理按钮和配置列表 -->
-            <el-row :gutter="20" class="mb-20">
-                <el-col :span="24">
-                    <el-card>
-                        <template #header>
-                            <div class="card-header">
-                                <span>从机配置管理</span>
-                                <el-button type="primary" @click="configDialogVisible = true">新建配置</el-button>
-                            </div>
-                        </template>
-                        <el-table :data="slaveConfigs" style="width: 100%">
-                            <el-table-column prop="name" label="配置名称" />
-                            <el-table-column label="从机数量" width="100">
-                                <template #default="scope">
-                                    {{ scope.row.slaves.length }}
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="从机配置" min-width="300">
-                                <template #default="scope">
-                                    <div v-for="(slave, index) in scope.row.slaves" :key="index" class="slave-config-info">
-                                        从机{{ index + 1 }}: ID={{ slave.id }}, 
-                                        导通={{ slave.conductionNum }}, 
-                                        阻值={{ slave.resistanceNum }}, 
-                                        卡钉模式={{ slave.clipMode }}, 
-                                        卡钉状态={{ slave.clipStatus }}
-                                    </div>
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="操作" width="200">
-                                <template #default="scope">
-                                    <el-button size="small" @click="sendSlaveConfig(scope.row)">发送</el-button>
-                                    <el-button 
-                                        size="small" 
-                                        type="primary" 
-                                        @click="editConfig(scope.row)"
-                                    >
-                                        编辑
-                                    </el-button>
-                                    <el-button 
-                                        size="small" 
-                                        type="danger" 
-                                        @click="deleteConfig(scope.$index)"
-                                    >
-                                        删除
-                                    </el-button>
-                                </template>
-                            </el-table-column>
-                        </el-table>
-                    </el-card>
-                </el-col>
-            </el-row>
         </el-container>
     </div>
 </template>
@@ -1587,6 +1582,8 @@ export default {
 
 .el-tab-pane {
     height: 100%;
+    overflow: auto;
+    padding: 20px;
 }
 
 .el-tag--small {
@@ -1625,5 +1622,81 @@ export default {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    min-width: 500px;  /* 设置最小宽度确保内容不会挤压 */
+}
+
+/* 配置管理容器样式 */
+.config-management-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.config-header {
+    flex-shrink: 0;
+}
+
+.config-table-container {
+    flex: 1;
+    overflow: auto;
+}
+
+/* 调整表格容器样式 */
+.log-table-container {
+    height: calc(100% - 60px);  /* 减去控制面板的高度 */
+    overflow: auto;
+}
+
+.output-window {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.control-panel {
+    flex-shrink: 0;
+}
+
+/* 确保表格内容可以水平滚动 */
+.slave-config-info {
+    margin: 5px 0;
+    font-family: monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 500px;  /* 设置最小宽度确保内容不会挤压 */
+}
+
+/* 调整表格固定列的样式 */
+.el-table .el-table__fixed-right {
+    height: 100% !important;
+    bottom: 0;
+}
+
+/* 确保内容区域填满可用空间 */
+.serial-port-assistant {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.el-container {
+    flex: 1;
+    min-height: 0;  /* 允许容器收缩 */
+}
+
+.el-main {
+    flex: 1;
+    overflow: hidden;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.serial-content {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 </style>
