@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.3.0](https://github.com/ylongwang2782/WhtsViewer/compare/v1.2.0...v1.3.0) (2025-06-11)
+
+
+### ✨ Features
+
+* 从机配置界面发送新增响应逻辑 ([089f9dd](https://github.com/ylongwang2782/WhtsViewer/commit/089f9dd3647475b6de5c5d28356d87d8f05bcf4b))
+
+
+### 🐛 Bug Fixes
+
+* 修复了开始指令异常的问题 ([fa5c552](https://github.com/ylongwang2782/WhtsViewer/commit/fa5c552fc5632bec8da8d8683f7197ec6badf98f))
+
 ## [1.2.0](https://github.com/ylongwang2782/WhtsViewer/compare/v1.1.0...v1.2.0) (2025-06-11)
 
 
