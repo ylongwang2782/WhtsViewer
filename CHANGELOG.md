@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.2.0](https://github.com/ylongwang2782/WhtsViewer/compare/v1.1.0...v1.2.0) (2025-06-11)
+
+
+### ✨ Features
+
+* 新增从机查询 ([95feb48](https://github.com/ylongwang2782/WhtsViewer/commit/95feb484771e0b6756c3803da00018c53a761d27))
+
 ## [1.1.0](https://github.com/ylongwang2782/WhtsViewer/compare/v1.0.2...v1.1.0) (2025-06-11)
 
 
