@@ -261,6 +261,44 @@
                                 </div>
                             </div>
                         </el-tab-pane>
+                        <el-tab-pane label="从机查询">
+                            <div class="device-query-container">
+                                <div class="query-header mb-20">
+                                    <el-button type="primary" @click="queryDeviceList">查询设备列表</el-button>
+                                </div>
+                                <div class="device-table-container">
+                                    <el-table :data="deviceList" style="width: 100%" border>
+                                        <el-table-column prop="deviceId" label="设备ID" width="150">
+                                            <template #default="scope">
+                                                {{ scope.row.deviceId.toUpperCase() }}
+                                            </template>
+                                        </el-table-column>
+                                        <el-table-column prop="shortId" label="短ID" width="100">
+                                            <template #default="scope">
+                                                0x{{ scope.row.shortId.toString(16).padStart(2, '0').toUpperCase() }}
+                                            </template>
+                                        </el-table-column>
+                                        <el-table-column prop="online" label="在线状态" width="100">
+                                            <template #default="scope">
+                                                <el-tag :type="scope.row.online ? 'success' : 'danger'">
+                                                    {{ scope.row.online ? '在线' : '离线' }}
+                                                </el-tag>
+                                            </template>
+                                        </el-table-column>
+                                        <el-table-column prop="version" label="固件版本" width="150">
+                                            <template #default="scope">
+                                                v{{ scope.row.versionMajor }}.{{ scope.row.versionMinor }}.{{ scope.row.versionPatch }}
+                                            </template>
+                                        </el-table-column>
+                                        <el-table-column label="最后更新时间" min-width="200">
+                                            <template #default="scope">
+                                                {{ scope.row.lastUpdate }}
+                                            </template>
+                                        </el-table-column>
+                                    </el-table>
+                                </div>
+                            </div>
+                        </el-tab-pane>
                     </el-tabs>
                 </div>
             </el-main>
@@ -661,6 +699,7 @@ export default {
             0x01: 'MODE_CFG_MSG',
             0x02: 'RST_MSG',
             0x03: 'CTRL_MSG',
+            0x05: 'DEVICE_LIST_RSP_MSG',
             0x10: 'PING_RES_MSG'
         };
 
@@ -830,8 +869,52 @@ export default {
                             }
                         }
                     } else {
-                        // 非Slave2Backend包正常添加到日志
-                        logs.value.push(logEntry);
+                        // 处理设备列表响应
+                        if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'DEVICE_LIST_RSP_MSG') {
+                            const payload = new Uint8Array(data).slice(8); // 跳过帧头和长度等字段
+                            const deviceCount = payload[0];
+                            const devices = [];
+
+                            let offset = 1; // 跳过设备数量字段
+                            for (let i = 0; i < deviceCount; i++) {
+                                // 解析设备ID (4字节，小端)
+                                const deviceIdBytes = payload.slice(offset, offset + 4);
+                                const deviceId = Array.from(deviceIdBytes).reverse()
+                                    .map(b => b.toString(16).padStart(2, '0')).join('');
+                                offset += 4;
+
+                                // 解析短ID (1字节)
+                                const shortId = payload[offset];
+                                offset += 1;
+
+                                // 解析在线状态 (1字节)
+                                const online = payload[offset] === 1;
+                                offset += 1;
+
+                                // 解析版本号
+                                const versionMajor = payload[offset];
+                                const versionMinor = payload[offset + 1];
+                                // 补丁版本号 (2字节，小端)
+                                const versionPatch = payload[offset + 2] | (payload[offset + 3] << 8);
+                                offset += 4;
+
+                                devices.push({
+                                    deviceId,
+                                    shortId,
+                                    online,
+                                    versionMajor,
+                                    versionMinor,
+                                    versionPatch,
+                                    lastUpdate: new Date().toLocaleString()
+                                });
+                            }
+
+                            deviceList.value = devices;
+                            ElMessage.success(`查询到 ${deviceCount} 个设备`);
+                        } else {
+                            // 非Slave2Backend包正常添加到日志
+                            logs.value.push(logEntry);
+                        }
                     }
                 }
             } else {
@@ -1276,6 +1359,26 @@ export default {
             localStorage.setItem('slaveConfigs', JSON.stringify(slaveConfigs.value));
         };
 
+        // 添加设备列表相关代码
+        const deviceList = ref([]);
+
+        // 查询设备列表
+        const queryDeviceList = async () => {
+            if (!isConnected.value) {
+                ElMessage.warning('请先建立连接');
+                return;
+            }
+
+            try {
+                // 设备列表请求消息
+                const message = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x05, 0x00]);
+                console.log('发送设备列表请求:', Array.from(message).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '));
+                await window.electronAPI.sendUdpData(message);
+            } catch (error) {
+                ElMessage.error('发送失败：' + error.message);
+            }
+        };
+
         onMounted(() => {
             scanPorts();
             window.electronAPI.onSerialData(handleSerialData);
@@ -1349,7 +1452,9 @@ export default {
             saveConfig,
             sendSlaveConfig,
             editConfig,
-            deleteConfig
+            deleteConfig,
+            deviceList,
+            queryDeviceList
         };
     }
 };
@@ -1698,5 +1803,20 @@ export default {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+}
+
+.device-query-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.query-header {
+    flex-shrink: 0;
+}
+
+.device-table-container {
+    flex: 1;
+    overflow: auto;
 }
 </style>
