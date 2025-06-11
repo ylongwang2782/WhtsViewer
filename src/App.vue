@@ -92,28 +92,28 @@
                 <div class="serial-content">
                     <el-tabs type="border-card">
                         <el-tab-pane label="所有数据">
-                            <div class="output-window">
-                                <div class="log-table-container" ref="logContainer">
+                    <div class="output-window">
+                        <div class="log-table-container" ref="logContainer">
                                     <el-table :data="paginatedLogs" style="width: 100%" size="small" height="calc(100% - 50px)" border
-                                        :style="{
-                                            fontSize: tableConfig.fontSize + 'px',
-                                            fontFamily: tableConfig.fontFamily
-                                        }">
+                                :style="{
+                                    fontSize: tableConfig.fontSize + 'px',
+                                    fontFamily: tableConfig.fontFamily
+                                }">
                                         <el-table-column prop="timestamp" label="Time" width="100" />
                                         <el-table-column prop="packetId" label="Packet" :width="tableConfig.columnWidths.packetId" resizable />
                                         <el-table-column prop="message" label="Message" :width="tableConfig.columnWidths.message" resizable />
                                         <el-table-column prop="slaveId" label="Slave ID" :width="tableConfig.columnWidths.slaveId" resizable />
                                         <el-table-column prop="deviceStatus" label="Device Status" :width="tableConfig.columnWidths.deviceStatus" resizable />
                                         <el-table-column prop="context" label="Payload" :width="tableConfig.columnWidths.context" resizable />
-                                    </el-table>
-                                    <div class="pagination-container">
-                                        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize"
-                                            :page-sizes="pageSizes" :total="filteredLogs.length"
-                                            layout="total, sizes, prev, pager, next, jumper" @size-change="handlePageSizeChange"
-                                            @current-change="handleCurrentPageChange" />
-                                    </div>
-                                </div>
+                            </el-table>
+                            <div class="pagination-container">
+                                <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize"
+                                    :page-sizes="pageSizes" :total="filteredLogs.length"
+                                    layout="total, sizes, prev, pager, next, jumper" @size-change="handlePageSizeChange"
+                                    @current-change="handleCurrentPageChange" />
                             </div>
+                        </div>
+                    </div>
                         </el-tab-pane>
                         <el-tab-pane label="导通数据">
                             <div class="output-window">
@@ -240,7 +240,13 @@
                                         </el-table-column>
                                         <el-table-column label="操作" width="200" fixed="right">
                                             <template #default="scope">
-                                                <el-button size="small" @click="sendSlaveConfig(scope.row)">发送</el-button>
+                                                <el-button 
+                                                    size="small" 
+                                                    :loading="isWaitingConfigResponse" 
+                                                    @click="sendSlaveConfig(scope.row)"
+                                                >
+                                                    {{ isWaitingConfigResponse ? '等待响应...' : '发送' }}
+                                                </el-button>
                                                 <el-button 
                                                     size="small" 
                                                     type="primary" 
@@ -489,7 +495,7 @@
 
 <script>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
-import { ElMessage, ElLoading } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import packageInfo from '../package.json';  // 导入package.json获取版本号
 
 export default {
@@ -693,9 +699,9 @@ export default {
             return PACKET_TYPES[packetId] || `Unknown(0x${packetId.toString(16).toUpperCase()})`;
         };
 
-        // 添加Master2Backend消息类型映射
+        // 修改Master2Backend消息类型映射，添加SLAVE_CFG_RSP_MSG
         const MASTER2BACKEND_MSG_TYPES = {
-            0x00: 'SLAVE_CFG_MSG',
+            0x00: 'SLAVE_CFG_RSP_MSG',    // 修改这里，原来是SLAVE_CFG_MSG
             0x01: 'MODE_CFG_MSG',
             0x02: 'RST_MSG',
             0x03: 'CTRL_MSG',
@@ -800,7 +806,7 @@ export default {
             }
         };
 
-        // 修改handleUdpData函数，添加配置响应处理
+        // 修改handleUdpData函数，添加对Master2Backend Ctrl Message的处理
         const handleUdpData = (event, { data }) => {
             console.log('UDP data received:', data);
             
@@ -815,145 +821,76 @@ export default {
                     timestamp: new Date().toLocaleTimeString()
                 };
 
-                // 处理从机配置响应
-                if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'SLAVE_CFG_MSG') {
-                    if (window._clearConfigTimeout) {
-                        window._clearConfigTimeout();
-                    }
-
-                    const payload = new Uint8Array(data).slice(8); // 跳过帧头和长度等字段
-                    const status = payload[0];
-                    const slaveNum = payload[1];
+                if (whtsFrame.packetId === 0x04) {
+                    const deviceStatusBits = parseDeviceStatus(parseInt(whtsFrame.deviceStatus.slice(2), 16));
                     
-                    if (status === 0) {
-                        ElMessage.success('从机配置成功');
+                    // 更新设备最后通信时间
+                    deviceLastUpdateTime.value.set(whtsFrame.slaveId, Date.now());
+                    deviceOnlineStatus.value.set(whtsFrame.slaveId, true);
+                    
+                    slave2BackendLogs.value.set(whtsFrame.slaveId, {
+                        ...logEntry,
+                        lastUpdate: new Date().toLocaleTimeString(),
+                        ...deviceStatusBits,
+                        isOffline: false
+                    });
+
+                    // 对于CONDUCTION_DATA_MSG，更新而不是追加到主日志
+                    if (whtsFrame.msgType === 'CONDUCTION_DATA_MSG') {
+                        // 查找并更新现有的CONDUCTION_DATA_MSG条目
+                        const existingIndex = logs.value.findIndex(log => 
+                            log.slaveId === whtsFrame.slaveId && 
+                            log.message === 'CONDUCTION_DATA_MSG'
+                        );
                         
-                        // 验证响应数据
-                        let isValid = true;
-                        let offset = 2; // 跳过status和slaveNum
-                        
-                        if (window._currentSendingConfig && window._currentSendingConfig.slaves.length === slaveNum) {
-                            for (const configSlave of window._currentSendingConfig.slaves) {
-                                // 验证从机ID (4字节，小端)
-                                const idBytes = payload.slice(offset, offset + 4);
-                                const responseId = Array.from(idBytes)
-                                    .map(b => b.toString(16).padStart(2, '0'))
-                                    .join('')
-                                    .toUpperCase();
-                                offset += 4;
-
-                                // 验证其他参数
-                                const responseConductionNum = payload[offset].toString(16).padStart(2, '0').toUpperCase();
-                                const responseResistanceNum = payload[offset + 1].toString(16).padStart(2, '0').toUpperCase();
-                                const responseClipMode = payload[offset + 2].toString(16).padStart(2, '0').toUpperCase();
-                                const responseClipStatus = (payload[offset + 3] | (payload[offset + 4] << 8))
-                                    .toString(16).padStart(4, '0').toUpperCase();
-                                offset += 5;
-
-                                // 调试输出
-                                console.log('Response validation:', {
-                                    'Config ID': configSlave.id,
-                                    'Response ID': responseId,
-                                    'Config ConductionNum': configSlave.conductionNum,
-                                    'Response ConductionNum': responseConductionNum,
-                                    'Config ResistanceNum': configSlave.resistanceNum,
-                                    'Response ResistanceNum': responseResistanceNum,
-                                    'Config ClipMode': configSlave.clipMode,
-                                    'Response ClipMode': responseClipMode,
-                                    'Config ClipStatus': configSlave.clipStatus,
-                                    'Response ClipStatus': responseClipStatus
-                                });
-
-                                // 将配置ID转换为与响应格式相同的格式
-                                const configIdBytes = [];
-                                for (let i = 0; i < 8; i += 2) {
-                                    configIdBytes.push(parseInt(configSlave.id.slice(i, i + 2), 16));
-                                }
-                                const normalizedConfigId = configIdBytes
-                                    .map(b => b.toString(16).padStart(2, '0'))
-                                    .join('')
-                                    .toUpperCase();
-
-                                if (normalizedConfigId !== responseId ||
-                                    configSlave.conductionNum !== responseConductionNum ||
-                                    configSlave.resistanceNum !== responseResistanceNum ||
-                                    configSlave.clipMode !== responseClipMode ||
-                                    configSlave.clipStatus !== responseClipStatus) {
-                                    console.log('Mismatch found:', {
-                                        'ID match': normalizedConfigId === responseId,
-                                        'ConductionNum match': configSlave.conductionNum === responseConductionNum,
-                                        'ResistanceNum match': configSlave.resistanceNum === responseResistanceNum,
-                                        'ClipMode match': configSlave.clipMode === responseClipMode,
-                                        'ClipStatus match': configSlave.clipStatus === responseClipStatus
-                                    });
-                                    isValid = false;
-                                    break;
-                                }
-                            }
+                        if (existingIndex !== -1) {
+                            // 更新现有条目
+                            logs.value[existingIndex] = logEntry;
                         } else {
-                            console.log('Slave count mismatch:', {
-                                'Config slave count': window._currentSendingConfig?.slaves.length,
-                                'Response slave count': slaveNum
-                            });
-                            isValid = false;
-                        }
-                        
-                        if (!isValid) {
-                            ElMessage.warning('配置响应数据与发送不匹配，请检查配置');
+                            // 如果不存在，则添加新条目
+                            logs.value.push(logEntry);
                         }
                     } else {
-                        ElMessage.error('从机配置失败');
+                        // 其他类型的Slave2Backend消息正常添加
+                        logs.value.push(logEntry);
                     }
-                }
-                
-                // 处理设备列表响应
-                else if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'DEVICE_LIST_RSP_MSG') {
-                    const payload = new Uint8Array(data).slice(8); // 跳过帧头和长度等字段
-                    const deviceCount = payload[0];
-                    const devices = [];
+                } else {
+                    // 处理Master2Backend的Ctrl Message响应
+                    if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'CTRL_MSG' && isWaitingResponse.value) {
+                        isWaitingResponse.value = false;
+                        if (responseTimeout.value) {
+                            clearTimeout(responseTimeout.value);
+                        }
 
-                    let offset = 1; // 跳过设备数量字段
-                    for (let i = 0; i < deviceCount; i++) {
-                        // 解析设备ID (4字节，小端)
-                        const deviceIdBytes = payload.slice(offset, offset + 4);
-                        const deviceId = Array.from(deviceIdBytes).reverse()
-                            .map(b => b.toString(16).padStart(2, '0')).join('');
-                        offset += 4;
+                        const payload = whtsFrame.msgPayload.split(' ');
+                        if (payload.length >= 2) {
+                            const status = parseInt(payload[0], 16);
+                            const runningStatus = parseInt(payload[1], 16);
 
-                        // 解析短ID (1字节)
-                        const shortId = payload[offset];
-                        offset += 1;
+                            if (status === 0) { // 响应正常
+                                isRunning.value = runningStatus === 1;
+                                ElMessage.success(`主机已${isRunning.value ? '开启' : '停止'}`);
+                            } else { // 响应异常
+                                ElMessage.error('主机响应异常');
+                            }
+                        }
+                    } else if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'SLAVE_CFG_RSP_MSG' && isWaitingConfigResponse.value) {
+                        // 清除配置响应等待状态
+                        isWaitingConfigResponse.value = false;
+                        if (configResponseTimeout.value) {
+                            clearTimeout(configResponseTimeout.value);
+                        }
 
-                        // 解析在线状态 (1字节)
-                        const online = payload[offset] === 1;
-                        offset += 1;
-
-                        // 解析版本号
-                        const versionMajor = payload[offset];
-                        const versionMinor = payload[offset + 1];
-                        // 补丁版本号 (2字节，小端)
-                        const versionPatch = payload[offset + 2] | (payload[offset + 3] << 8);
-                        offset += 4;
-
-                        devices.push({
-                            deviceId,
-                            shortId,
-                            online,
-                            versionMajor,
-                            versionMinor,
-                            versionPatch,
-                            lastUpdate: new Date().toLocaleString()
-                        });
-                    }
-
-                    deviceList.value = devices;
-                    ElMessage.success(`查询到 ${deviceCount} 个设备`);
-                }
-                
-                // 处理其他消息
-                else {
-                    // 处理设备列表响应
-                    if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'DEVICE_LIST_RSP_MSG') {
+                        const payload = whtsFrame.msgPayload.split(' ');
+                        if (payload.length >= 1) {
+                            const status = parseInt(payload[0], 16);
+                            if (status === 0) { // 响应正常
+                                ElMessage.success('配置已成功应用');
+                            } else { // 响应异常
+                                ElMessage.error('配置应用失败');
+                            }
+                        }
+                    } else if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'DEVICE_LIST_RSP_MSG') {
                         const payload = new Uint8Array(data).slice(8); // 跳过帧头和长度等字段
                         const deviceCount = payload[0];
                         const devices = [];
@@ -995,16 +932,16 @@ export default {
                         deviceList.value = devices;
                         ElMessage.success(`查询到 ${deviceCount} 个设备`);
                     } else {
-                        // 其他类型的Slave2Backend消息正常添加
+                        // 非Slave2Backend包正常添加到日志
                         logs.value.push(logEntry);
                     }
                 }
             } else {
-                const hexData = Array.from(new Uint8Array(data))
-                    .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
-                    .join(' ');
-                
-                logs.value.push({
+            const hexData = Array.from(new Uint8Array(data))
+                .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
+                .join(' ');
+
+            logs.value.push({
                     packetId: 'Invalid Frame',
                     message: '--',
                     slaveId: '--',
@@ -1419,7 +1356,7 @@ export default {
             currentConfig.value.slaves.splice(index, 1);
         };
 
-        // 修改发送配置函数，添加等待响应状态
+        // 修改发送配置函数，添加等待响应逻辑
         const sendSlaveConfig = async (config) => {
             if (!isConnected.value) {
                 ElMessage.warning('请先建立连接');
@@ -1430,31 +1367,24 @@ export default {
                 const message = generateSlaveConfigMessage(config);
                 console.log('发送从机配置:', Array.from(message).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '));
                 
-                // 设置加载状态
-                const loadingInstance = ElLoading.service({
-                    target: '.config-table-container',
-                    text: '等待配置响应...'
-                });
+                // 设置等待状态
+                isWaitingConfigResponse.value = true;
+                currentConfigName.value = config.name;
                 
-                // 设置超时定时器
-                const timeoutTimer = setTimeout(() => {
-                    loadingInstance.close();
-                    ElMessage.error('配置响应超时');
-                }, 3000);
-                
-                // 保存当前配置以供响应处理使用
-                window._currentSendingConfig = config;
+                // 设置超时
+                if (configResponseTimeout.value) {
+                    clearTimeout(configResponseTimeout.value);
+                }
+                configResponseTimeout.value = setTimeout(() => {
+                    if (isWaitingConfigResponse.value) {
+                        isWaitingConfigResponse.value = false;
+                        ElMessage.error('配置响应超时');
+                    }
+                }, 10000); // 1秒超时
                 
                 await window.electronAPI.sendUdpData(message);
-                
-                // 清除超时定时器的函数将在响应处理中调用
-                window._clearConfigTimeout = () => {
-                    clearTimeout(timeoutTimer);
-                    loadingInstance.close();
-                    delete window._currentSendingConfig;
-                    delete window._clearConfigTimeout;
-                };
             } catch (error) {
+                isWaitingConfigResponse.value = false;
                 ElMessage.error('发送失败：' + error.message);
             }
         };
@@ -1495,6 +1425,11 @@ export default {
             currentConfig.value = createEmptyConfig();
             configDialogVisible.value = true;
         };
+
+        // 添加配置响应相关的状态
+        const isWaitingConfigResponse = ref(false);
+        const configResponseTimeout = ref(null);
+        const currentConfigName = ref('');
 
         onMounted(() => {
             scanPorts();
@@ -1572,7 +1507,9 @@ export default {
             deleteConfig,
             deviceList,
             queryDeviceList,
-            showNewConfigDialog
+            showNewConfigDialog,
+            isWaitingConfigResponse,
+            currentConfigName
         };
     }
 };
