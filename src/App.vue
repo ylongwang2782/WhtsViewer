@@ -54,6 +54,21 @@
                 </el-row>
 
                 <el-row :gutter="20" class="mb-20">
+                    <el-col :span="6">
+                        <el-select v-model="detectionMode" placeholder="选择检测模式" :disabled="!isConnected">
+                            <el-option label="导通检测模式" value="0" />
+                            <el-option label="阻值检测模式" value="1" />
+                            <el-option label="卡钉检测模式" value="2" />
+                        </el-select>
+                    </el-col>
+                    <el-col :span="4">
+                        <el-button type="primary" :loading="isWaitingModeResponse" @click="switchDetectionMode" :disabled="!isConnected">
+                            {{ isWaitingModeResponse ? '切换中...' : '切换模式' }}
+                        </el-button>
+                    </el-col>
+                </el-row>
+
+                <el-row :gutter="20" class="mb-20">
                     <el-col :span="16">
                         <el-input v-model="hexCommand" placeholder="输入十六进制命令 (例如: AB CD 01 00 00 00 02 00 00)"
                             clearable>
@@ -881,6 +896,27 @@ export default {
                                 ElMessage.error('配置应用失败');
                             }
                         }
+                    } else if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'MODE_CFG_MSG' && isWaitingModeResponse.value) {
+                        // 处理模式切换响应
+                        isWaitingModeResponse.value = false;
+                        if (modeResponseTimeout.value) {
+                            clearTimeout(modeResponseTimeout.value);
+                        }
+
+                        const payload = whtsFrame.msgPayload.split(' ');
+                        if (payload.length >= 2) {
+                            const status = parseInt(payload[0], 16);
+                            const currentMode = parseInt(payload[1], 16);
+
+                            if (status === 0) { // 响应正常
+                                const modeNames = ['导通检测模式', '阻值检测模式', '卡钉检测模式'];
+                                const modeName = modeNames[currentMode] || '未知模式';
+                                ElMessage.success(`模式已切换至：${modeName}`);
+                                detectionMode.value = currentMode.toString();
+                            } else { // 响应异常
+                                ElMessage.error('模式切换失败');
+                            }
+                        }
                     } else if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'DEVICE_LIST_RSP_MSG') {
                         const payload = new Uint8Array(data).slice(8); // 跳过帧头和长度等字段
                         const deviceCount = payload[0];
@@ -1417,10 +1453,51 @@ export default {
             configDialogVisible.value = true;
         };
 
+        // 检测模式切换函数
+        const switchDetectionMode = async () => {
+            if (!isConnected.value) {
+                ElMessage.warning('请先建立连接');
+                return;
+            }
+
+            try {
+                isWaitingModeResponse.value = true;
+                
+                // 构建模式切换命令: AB CD 02 00 00 02 00 01 [mode]
+                const modeValue = parseInt(detectionMode.value);
+                const modeCmd = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x01, modeValue]);
+                
+                console.log('发送模式切换命令:', Array.from(modeCmd).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '));
+                
+                await window.electronAPI.sendUdpData(modeCmd);
+
+                // 设置响应超时
+                if (modeResponseTimeout.value) {
+                    clearTimeout(modeResponseTimeout.value);
+                }
+
+                modeResponseTimeout.value = setTimeout(() => {
+                    if (isWaitingModeResponse.value) {
+                        isWaitingModeResponse.value = false;
+                        ElMessage.error('模式切换响应超时');
+                    }
+                }, 5000); // 5秒超时
+
+            } catch (error) {
+                isWaitingModeResponse.value = false;
+                ElMessage.error('模式切换失败：' + error.message);
+            }
+        };
+
         // 添加配置响应相关的状态
         const isWaitingConfigResponse = ref(false);
         const configResponseTimeout = ref(null);
         const currentConfigName = ref('');
+
+        // 添加检测模式相关的状态
+        const detectionMode = ref('0'); // 默认导通检测模式
+        const isWaitingModeResponse = ref(false);
+        const modeResponseTimeout = ref(null);
 
         onMounted(() => {
             scanPorts();
@@ -1500,7 +1577,10 @@ export default {
             queryDeviceList,
             showNewConfigDialog,
             isWaitingConfigResponse,
-            currentConfigName
+            currentConfigName,
+            detectionMode,
+            isWaitingModeResponse,
+            switchDetectionMode
         };
     }
 };
