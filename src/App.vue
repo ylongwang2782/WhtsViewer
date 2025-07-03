@@ -63,12 +63,8 @@
                         </el-input>
                     </el-col>
                     <el-col :span="8">
-                        <el-button 
-                            :type="isRunning ? 'danger' : 'success'"
-                            :loading="isWaitingResponse"
-                            @click="handleCtrlCommand"
-                            :disabled="!isConnected"
-                        >
+                        <el-button :type="isRunning ? 'danger' : 'success'" :loading="isWaitingResponse"
+                            @click="handleCtrlCommand" :disabled="!isConnected">
                             {{ isWaitingResponse ? '等待响应...' : (isRunning ? '停止' : '开始') }}
                         </el-button>
                     </el-col>
@@ -92,52 +88,54 @@
                 <div class="serial-content">
                     <el-tabs type="border-card">
                         <el-tab-pane label="所有数据">
-                    <div class="output-window">
-                        <div class="log-table-container" ref="logContainer">
-                                    <el-table :data="paginatedLogs" style="width: 100%" size="small" height="calc(100% - 50px)" border
-                                :style="{
-                                    fontSize: tableConfig.fontSize + 'px',
-                                    fontFamily: tableConfig.fontFamily
-                                }">
+                            <div class="output-window">
+                                <div class="log-table-container" ref="logContainer">
+                                    <el-table :data="paginatedLogs" style="width: 100%" size="small"
+                                        height="calc(100% - 50px)" border :style="{
+                                            fontSize: tableConfig.fontSize + 'px',
+                                            fontFamily: tableConfig.fontFamily
+                                        }">
                                         <el-table-column prop="timestamp" label="Time" width="100" />
-                                        <el-table-column prop="packetId" label="Packet" :width="tableConfig.columnWidths.packetId" resizable />
-                                        <el-table-column prop="message" label="Message" :width="tableConfig.columnWidths.message" resizable />
-                                        <el-table-column prop="slaveId" label="Slave ID" :width="tableConfig.columnWidths.slaveId" resizable />
-                                        <el-table-column prop="deviceStatus" label="Device Status" :width="tableConfig.columnWidths.deviceStatus" resizable />
-                                        <el-table-column prop="context" label="Payload" :width="tableConfig.columnWidths.context" resizable />
-                            </el-table>
-                            <div class="pagination-container">
-                                <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize"
-                                    :page-sizes="pageSizes" :total="filteredLogs.length"
-                                    layout="total, sizes, prev, pager, next, jumper" @size-change="handlePageSizeChange"
-                                    @current-change="handleCurrentPageChange" />
+                                        <el-table-column prop="packetId" label="Packet"
+                                            :width="tableConfig.columnWidths.packetId" resizable />
+                                        <el-table-column prop="message" label="Message"
+                                            :width="tableConfig.columnWidths.message" resizable />
+                                        <el-table-column prop="slaveId" label="Slave ID"
+                                            :width="tableConfig.columnWidths.slaveId" resizable />
+                                        <el-table-column prop="deviceStatus" label="Device Status"
+                                            :width="tableConfig.columnWidths.deviceStatus" resizable />
+                                        <el-table-column prop="context" label="Payload"
+                                            :width="tableConfig.columnWidths.context" resizable />
+                                    </el-table>
+                                    <div class="pagination-container">
+                                        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize"
+                                            :page-sizes="pageSizes" :total="filteredLogs.length"
+                                            layout="total, sizes, prev, pager, next, jumper"
+                                            @size-change="handlePageSizeChange"
+                                            @current-change="handleCurrentPageChange" />
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
                         </el-tab-pane>
                         <el-tab-pane label="导通数据">
                             <div class="output-window">
                                 <div class="control-panel mb-20">
                                     <el-form inline>
                                         <el-form-item label="设备离线超时(ms)">
-                                            <el-input-number 
-                                                v-model="offlineTimeout"
-                                                :min="1000"
-                                                :max="60000"
-                                                :step="1000"
-                                                @change="checkDeviceStatus"
-                                            />
+                                            <el-input-number v-model="offlineTimeout" :min="1000" :max="60000"
+                                                :step="1000" @change="checkDeviceStatus" />
                                         </el-form-item>
                                     </el-form>
                                 </div>
                                 <div class="log-table-container">
-                                    <el-table :data="slave2BackendLogsArray" style="width: 100%" size="small" height="calc(100% - 50px)" border
-                                        :style="{
+                                    <el-table :data="slave2BackendLogsArray" style="width: 100%" size="small"
+                                        height="calc(100% - 50px)" border :style="{
                                             fontSize: tableConfig.fontSize + 'px',
                                             fontFamily: tableConfig.fontFamily
                                         }">
                                         <el-table-column prop="lastUpdate" label="Last Update" width="100" />
-                                        <el-table-column prop="slaveId" label="Slave ID" :width="tableConfig.columnWidths.slaveId" resizable>
+                                        <el-table-column prop="slaveId" label="Slave ID"
+                                            :width="tableConfig.columnWidths.slaveId" resizable>
                                             <template #default="scope">
                                                 <span :class="{ 'offline-device': scope.row.isOffline }">
                                                     {{ scope.row.slaveId }}
@@ -147,69 +145,79 @@
                                         <el-table-column label="Device Status" align="center">
                                             <el-table-column prop="cs" label="CS" width="40" align="center">
                                                 <template #default="scope">
-                                                    <el-tag :type="scope.row.cs === '1' ? 'success' : 'danger'" size="small">
+                                                    <el-tag :type="scope.row.cs === '1' ? 'success' : 'danger'"
+                                                        size="small">
                                                         {{ scope.row.cs }}
                                                     </el-tag>
                                                 </template>
                                             </el-table-column>
                                             <el-table-column prop="sl" label="SL" width="40" align="center">
                                                 <template #default="scope">
-                                                    <el-tag :type="scope.row.sl === '1' ? 'success' : 'danger'" size="small">
+                                                    <el-tag :type="scope.row.sl === '1' ? 'success' : 'danger'"
+                                                        size="small">
                                                         {{ scope.row.sl }}
                                                     </el-tag>
                                                 </template>
                                             </el-table-column>
                                             <el-table-column prop="eub" label="EUB" width="40" align="center">
                                                 <template #default="scope">
-                                                    <el-tag :type="scope.row.eub === '1' ? 'success' : 'danger'" size="small">
+                                                    <el-tag :type="scope.row.eub === '1' ? 'success' : 'danger'"
+                                                        size="small">
                                                         {{ scope.row.eub }}
                                                     </el-tag>
                                                 </template>
                                             </el-table-column>
                                             <el-table-column prop="bla" label="BLA" width="40" align="center">
                                                 <template #default="scope">
-                                                    <el-tag :type="scope.row.bla === '1' ? 'success' : 'danger'" size="small">
+                                                    <el-tag :type="scope.row.bla === '1' ? 'success' : 'danger'"
+                                                        size="small">
                                                         {{ scope.row.bla }}
                                                     </el-tag>
                                                 </template>
                                             </el-table-column>
                                             <el-table-column prop="ps" label="PS" width="40" align="center">
                                                 <template #default="scope">
-                                                    <el-tag :type="scope.row.ps === '1' ? 'success' : 'danger'" size="small">
+                                                    <el-tag :type="scope.row.ps === '1' ? 'success' : 'danger'"
+                                                        size="small">
                                                         {{ scope.row.ps }}
                                                     </el-tag>
                                                 </template>
                                             </el-table-column>
                                             <el-table-column prop="el1" label="EL1" width="40" align="center">
                                                 <template #default="scope">
-                                                    <el-tag :type="scope.row.el1 === '1' ? 'success' : 'danger'" size="small">
+                                                    <el-tag :type="scope.row.el1 === '1' ? 'success' : 'danger'"
+                                                        size="small">
                                                         {{ scope.row.el1 }}
                                                     </el-tag>
                                                 </template>
                                             </el-table-column>
                                             <el-table-column prop="el2" label="EL2" width="40" align="center">
                                                 <template #default="scope">
-                                                    <el-tag :type="scope.row.el2 === '1' ? 'success' : 'danger'" size="small">
+                                                    <el-tag :type="scope.row.el2 === '1' ? 'success' : 'danger'"
+                                                        size="small">
                                                         {{ scope.row.el2 }}
                                                     </el-tag>
                                                 </template>
                                             </el-table-column>
                                             <el-table-column prop="a1" label="A1" width="40" align="center">
                                                 <template #default="scope">
-                                                    <el-tag :type="scope.row.a1 === '1' ? 'success' : 'danger'" size="small">
+                                                    <el-tag :type="scope.row.a1 === '1' ? 'success' : 'danger'"
+                                                        size="small">
                                                         {{ scope.row.a1 }}
                                                     </el-tag>
                                                 </template>
                                             </el-table-column>
                                             <el-table-column prop="a2" label="A2" width="40" align="center">
                                                 <template #default="scope">
-                                                    <el-tag :type="scope.row.a2 === '1' ? 'success' : 'danger'" size="small">
+                                                    <el-tag :type="scope.row.a2 === '1' ? 'success' : 'danger'"
+                                                        size="small">
                                                         {{ scope.row.a2 }}
                                                     </el-tag>
                                                 </template>
                                             </el-table-column>
                                         </el-table-column>
-                                        <el-table-column prop="context" label="Conduction Data" :width="tableConfig.columnWidths.context" resizable />
+                                        <el-table-column prop="context" label="Conduction Data"
+                                            :width="tableConfig.columnWidths.context" resizable />
                                     </el-table>
                                 </div>
                             </div>
@@ -229,36 +237,27 @@
                                         </el-table-column>
                                         <el-table-column label="从机配置" min-width="300">
                                             <template #default="scope">
-                                                <div v-for="(slave, index) in scope.row.slaves" :key="index" class="slave-config-info">
-                                                    从机{{ index + 1 }}: ID={{ slave.id }}, 
-                                                    导通={{ slave.conductionNum }}, 
-                                                    阻值={{ slave.resistanceNum }}, 
-                                                    卡钉模式={{ slave.clipMode }}, 
+                                                <div v-for="(slave, index) in scope.row.slaves" :key="index"
+                                                    class="slave-config-info">
+                                                    从机{{ index + 1 }}: ID={{ slave.id }},
+                                                    导通={{ slave.conductionNum }},
+                                                    阻值={{ slave.resistanceNum }},
+                                                    卡钉模式={{ slave.clipMode }},
                                                     卡钉状态={{ slave.clipStatus }}
                                                 </div>
                                             </template>
                                         </el-table-column>
                                         <el-table-column label="操作" width="200" fixed="right">
                                             <template #default="scope">
-                                                <el-button 
-                                                    size="small" 
-                                                    :loading="isWaitingConfigResponse" 
-                                                    @click="sendSlaveConfig(scope.row)"
-                                                >
+                                                <el-button size="small" :loading="isWaitingConfigResponse"
+                                                    @click="sendSlaveConfig(scope.row)">
                                                     {{ isWaitingConfigResponse ? '等待响应...' : '发送' }}
                                                 </el-button>
-                                                <el-button 
-                                                    size="small" 
-                                                    type="primary" 
-                                                    @click="editConfig(scope.row)"
-                                                >
+                                                <el-button size="small" type="primary" @click="editConfig(scope.row)">
                                                     编辑
                                                 </el-button>
-                                                <el-button 
-                                                    size="small" 
-                                                    type="danger" 
-                                                    @click="deleteConfig(scope.$index)"
-                                                >
+                                                <el-button size="small" type="danger"
+                                                    @click="deleteConfig(scope.$index)">
                                                     删除
                                                 </el-button>
                                             </template>
@@ -293,7 +292,8 @@
                                         </el-table-column>
                                         <el-table-column prop="version" label="固件版本" width="150">
                                             <template #default="scope">
-                                                v{{ scope.row.versionMajor }}.{{ scope.row.versionMinor }}.{{ scope.row.versionPatch }}
+                                                v{{ scope.row.versionMajor }}.{{ scope.row.versionMinor }}.{{
+                                                    scope.row.versionPatch }}
                                             </template>
                                         </el-table-column>
                                         <el-table-column label="最后更新时间" min-width="200">
@@ -377,111 +377,102 @@
                     <el-form-item label="配置名称">
                         <el-input v-model="currentConfig.name" placeholder="请输入配置名称" />
                     </el-form-item>
-                    
+
                     <div v-for="(slave, index) in currentConfig.slaves" :key="index" class="slave-config-item">
-                        <el-divider>从机 {{index + 1}}</el-divider>
+                        <el-divider>从机 {{ index + 1 }}</el-divider>
                         <el-row :gutter="20">
                             <el-col :span="8">
                                 <el-form-item :label="'从机ID'" :rules="[
                                     { required: true, message: '请输入从机ID' },
-                                    { validator: (rule, value, callback) => {
-                                        if (!validateHex(value, 8)) {
-                                            callback(new Error('请输入8位十六进制数（例如：46733B4E）'));
-                                        } else {
-                                            callback();
+                                    {
+                                        validator: (rule, value, callback) => {
+                                            if (!validateHex(value, 8)) {
+                                                callback(new Error('请输入8位十六进制数（例如：46733B4E）'));
+                                            } else {
+                                                callback();
+                                            }
                                         }
-                                    }}
+                                    }
                                 ]">
-                                    <el-input 
-                                        v-model="slave.id" 
-                                        placeholder="8位十六进制数（例如：46733B4E）"
-                                        @input="value => slave.id = value.toUpperCase()"
-                                        maxlength="8"
-                                    />
+                                    <el-input v-model="slave.id" placeholder="8位十六进制数（例如：46733B4E）"
+                                        @input="value => slave.id = value.toUpperCase()" maxlength="8" />
                                 </el-form-item>
                             </el-col>
                             <el-col :span="4">
                                 <el-form-item label="导通检测数量" :rules="[
                                     { required: true, message: '请输入导通检测数量' },
-                                    { validator: (rule, value, callback) => {
-                                        if (!validateHex(value, 2)) {
-                                            callback(new Error('请输入2位十六进制数'));
-                                        } else {
-                                            callback();
+                                    {
+                                        validator: (rule, value, callback) => {
+                                            if (!validateHex(value, 2)) {
+                                                callback(new Error('请输入2位十六进制数'));
+                                            } else {
+                                                callback();
+                                            }
                                         }
-                                    }}
+                                    }
                                 ]">
-                                    <el-input 
-                                        v-model="slave.conductionNum"
-                                        placeholder="2位十六进制数"
-                                        @input="value => slave.conductionNum = value.toUpperCase()"
-                                        maxlength="2"
-                                    />
+                                    <el-input v-model="slave.conductionNum" placeholder="2位十六进制数"
+                                        @input="value => slave.conductionNum = value.toUpperCase()" maxlength="2" />
                                 </el-form-item>
                             </el-col>
                             <el-col :span="4">
                                 <el-form-item label="阻值检测数量" :rules="[
                                     { required: true, message: '请输入阻值检测数量' },
-                                    { validator: (rule, value, callback) => {
-                                        if (!validateHex(value, 2)) {
-                                            callback(new Error('请输入2位十六进制数'));
-                                        } else {
-                                            callback();
+                                    {
+                                        validator: (rule, value, callback) => {
+                                            if (!validateHex(value, 2)) {
+                                                callback(new Error('请输入2位十六进制数'));
+                                            } else {
+                                                callback();
+                                            }
                                         }
-                                    }}
+                                    }
                                 ]">
-                                    <el-input 
-                                        v-model="slave.resistanceNum"
-                                        placeholder="2位十六进制数"
-                                        @input="value => slave.resistanceNum = value.toUpperCase()"
-                                        maxlength="2"
-                                    />
+                                    <el-input v-model="slave.resistanceNum" placeholder="2位十六进制数"
+                                        @input="value => slave.resistanceNum = value.toUpperCase()" maxlength="2" />
                                 </el-form-item>
                             </el-col>
                             <el-col :span="4">
                                 <el-form-item label="卡钉检测模式" :rules="[
                                     { required: true, message: '请输入卡钉检测模式' },
-                                    { validator: (rule, value, callback) => {
-                                        if (!validateHex(value, 2)) {
-                                            callback(new Error('请输入2位十六进制数'));
-                                        } else {
-                                            callback();
+                                    {
+                                        validator: (rule, value, callback) => {
+                                            if (!validateHex(value, 2)) {
+                                                callback(new Error('请输入2位十六进制数'));
+                                            } else {
+                                                callback();
+                                            }
                                         }
-                                    }}
+                                    }
                                 ]">
-                                    <el-input 
-                                        v-model="slave.clipMode"
-                                        placeholder="2位十六进制数"
-                                        @input="value => slave.clipMode = value.toUpperCase()"
-                                        maxlength="2"
-                                    />
+                                    <el-input v-model="slave.clipMode" placeholder="2位十六进制数"
+                                        @input="value => slave.clipMode = value.toUpperCase()" maxlength="2" />
                                 </el-form-item>
                             </el-col>
                             <el-col :span="4">
                                 <el-form-item label="卡钉初始化状态" :rules="[
                                     { required: true, message: '请输入卡钉初始化状态' },
-                                    { validator: (rule, value, callback) => {
-                                        if (!validateHex(value, 4)) {
-                                            callback(new Error('请输入4位十六进制数'));
-                                        } else {
-                                            callback();
+                                    {
+                                        validator: (rule, value, callback) => {
+                                            if (!validateHex(value, 4)) {
+                                                callback(new Error('请输入4位十六进制数'));
+                                            } else {
+                                                callback();
+                                            }
                                         }
-                                    }}
+                                    }
                                 ]">
-                                    <el-input 
-                                        v-model="slave.clipStatus"
-                                        placeholder="4位十六进制数"
-                                        @input="value => slave.clipStatus = value.toUpperCase()"
-                                        maxlength="4"
-                                    />
+                                    <el-input v-model="slave.clipStatus" placeholder="4位十六进制数"
+                                        @input="value => slave.clipStatus = value.toUpperCase()" maxlength="4" />
                                 </el-form-item>
                             </el-col>
                         </el-row>
-                        <el-button type="danger" @click="removeSlave(index)" :disabled="currentConfig.slaves.length === 1">
+                        <el-button type="danger" @click="removeSlave(index)"
+                            :disabled="currentConfig.slaves.length === 1">
                             删除从机
                         </el-button>
                     </div>
-                    
+
                     <el-button type="primary" @click="addSlave">添加从机</el-button>
                 </el-form>
                 <template #footer>
@@ -757,7 +748,7 @@ export default {
             deviceLastUpdateTime.value.forEach((lastUpdate, slaveId) => {
                 const isOnline = (now - lastUpdate) <= offlineTimeout.value;
                 deviceOnlineStatus.value.set(slaveId, isOnline);
-                
+
                 // 如果设备离线，更新显示状态
                 if (!isOnline && slave2BackendLogs.value.has(slaveId)) {
                     const currentData = slave2BackendLogs.value.get(slaveId);
@@ -785,21 +776,21 @@ export default {
                 isWaitingResponse.value = true;
                 const runningStatus = !isRunning.value ? 1 : 0; // 切换状态
                 const ctrlCmd = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x03, runningStatus]);
-                
+
                 await window.electronAPI.sendUdpData(ctrlCmd);
-                
+
                 // 设置响应超时
                 if (responseTimeout.value) {
                     clearTimeout(responseTimeout.value);
                 }
-                
+
                 responseTimeout.value = setTimeout(() => {
                     if (isWaitingResponse.value) {
                         isWaitingResponse.value = false;
                         ElMessage.error('主机响应超时');
                     }
                 }, 3000); // 3秒超时
-                
+
             } catch (error) {
                 isWaitingResponse.value = false;
                 ElMessage.error('发送失败：' + error.message);
@@ -809,7 +800,7 @@ export default {
         // 修改handleUdpData函数，添加对Master2Backend Ctrl Message的处理
         const handleUdpData = (event, { data }) => {
             console.log('UDP data received:', data);
-            
+
             const whtsFrame = parseWhtsData(data);
             if (whtsFrame) {
                 const logEntry = {
@@ -823,11 +814,11 @@ export default {
 
                 if (whtsFrame.packetId === 0x04) {
                     const deviceStatusBits = parseDeviceStatus(parseInt(whtsFrame.deviceStatus.slice(2), 16));
-                    
+
                     // 更新设备最后通信时间
                     deviceLastUpdateTime.value.set(whtsFrame.slaveId, Date.now());
                     deviceOnlineStatus.value.set(whtsFrame.slaveId, true);
-                    
+
                     slave2BackendLogs.value.set(whtsFrame.slaveId, {
                         ...logEntry,
                         lastUpdate: new Date().toLocaleTimeString(),
@@ -838,11 +829,11 @@ export default {
                     // 对于CONDUCTION_DATA_MSG，更新而不是追加到主日志
                     if (whtsFrame.msgType === 'CONDUCTION_DATA_MSG') {
                         // 查找并更新现有的CONDUCTION_DATA_MSG条目
-                        const existingIndex = logs.value.findIndex(log => 
-                            log.slaveId === whtsFrame.slaveId && 
+                        const existingIndex = logs.value.findIndex(log =>
+                            log.slaveId === whtsFrame.slaveId &&
                             log.message === 'CONDUCTION_DATA_MSG'
                         );
-                        
+
                         if (existingIndex !== -1) {
                             // 更新现有条目
                             logs.value[existingIndex] = logEntry;
@@ -937,11 +928,11 @@ export default {
                     }
                 }
             } else {
-            const hexData = Array.from(new Uint8Array(data))
-                .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
-                .join(' ');
+                const hexData = Array.from(new Uint8Array(data))
+                    .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
+                    .join(' ');
 
-            logs.value.push({
+                logs.value.push({
                     packetId: 'Invalid Frame',
                     message: '--',
                     slaveId: '--',
@@ -961,25 +952,25 @@ export default {
         // 修改parseWhtsData函数中解析Slave2Backend的部分
         const parseWhtsData = (data) => {
             const bytes = new Uint8Array(data);
-            
+
             // 检查数据长度是否足够
             if (bytes.length < 7) {
                 console.log('Data too short for Whts protocol');
                 return null;
             }
-            
+
             // 检查帧头
             if (bytes[0] !== 0xAB || bytes[1] !== 0xCD) {
                 console.log('Invalid frame header');
                 return null;
             }
-            
+
             // 获取PacketID
             const packetId = bytes[2];
-            
+
             // 获取数据长度（小端格式）
             const length = bytes[6] << 8 | bytes[5];
-            
+
             // 检查数据长度是否合理
             if (length + 7 > bytes.length) {
                 console.log('Invalid data length');
@@ -991,7 +982,7 @@ export default {
             let msgPayload = null;
             let slaveId = null;
             let deviceStatus = null;
-            
+
             if (packetId === 0x03 && length > 0) { // Master2Backend packet
                 const messageId = bytes[7];
                 msgType = getMsgTypeName(messageId);
@@ -1001,17 +992,17 @@ export default {
             } else if (packetId === 0x04 && length >= 7) { // Slave2Backend packet
                 const messageId = bytes[7];
                 msgType = SLAVE2BACKEND_MSG_TYPES[messageId] || `Unknown(0x${messageId.toString(16).toUpperCase()})`;
-                
+
                 // 解析Slave ID (4字节，小端)
                 slaveId = bytes[8] | (bytes[9] << 8) | (bytes[10] << 16) | (bytes[11] << 24);
-                
+
                 // 解析Device Status (2字节)
                 deviceStatus = bytes[12] | (bytes[13] << 8);
-                
+
                 if (messageId === 0x00) { // CONDUCTION_DATA_MSG
                     // 解析导通数据长度（2字节）
                     const conductionLength = bytes[14] | (bytes[15] << 8);
-                    
+
                     // 只提取导通数据部分（不包含长度字段）
                     msgPayload = Array.from(bytes.slice(16, 14 + conductionLength + 2))
                         .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
@@ -1023,12 +1014,12 @@ export default {
                         .join(' ');
                 }
             }
-            
+
             // 提取完整Payload
             const payload = Array.from(bytes.slice(7, 7 + length))
                 .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
                 .join(' ');
-            
+
             return {
                 packetId,
                 payload,
@@ -1264,13 +1255,13 @@ export default {
         // 修改生成消息的函数
         const generateSlaveConfigMessage = (config) => {
             const data = [];
-            
+
             // Message ID (SLAVE_CFG_MSG = 0x00) 先加入，这样它也会被计入长度
             data.push(0x00);
-            
+
             // Slave数量
             data.push(config.slaves.length);
-            
+
             config.slaves.forEach(slave => {
                 // Slave ID (4 bytes)
                 const idBytes = [];
@@ -1279,25 +1270,25 @@ export default {
                 }
                 // 小端序，需要反转字节顺序
                 data.push(...idBytes.reverse());
-                
+
                 // Conduction Num (1 byte)
                 data.push(parseInt(slave.conductionNum, 16));
-                
+
                 // Resistance Num (1 byte)
                 data.push(parseInt(slave.resistanceNum, 16));
-                
+
                 // Clip Mode (1 byte)
                 data.push(parseInt(slave.clipMode, 16));
-                
+
                 // Clip Status (2 bytes, little endian)
                 const statusValue = parseInt(slave.clipStatus, 16);
                 data.push(statusValue & 0xFF);
                 data.push((statusValue >> 8) & 0xFF);
             });
-            
+
             // 计算总长度（包含Message ID）
             const messageLength = data.length;
-            
+
             // 构建完整消息
             const fullMessage = [
                 0xAB, 0xCD,         // Frame Header
@@ -1306,7 +1297,7 @@ export default {
                 messageLength, 0x00, // Length (little endian)
                 ...data             // Message ID + Payload
             ];
-            
+
             return new Uint8Array(fullMessage);
         };
 
@@ -1316,7 +1307,7 @@ export default {
                 ElMessage.warning('请输入配置名称');
                 return;
             }
-            
+
             // 验证所有从机ID格式
             for (const slave of currentConfig.value.slaves) {
                 if (!validateHex(slave.id, 8)) {
@@ -1324,17 +1315,17 @@ export default {
                     return;
                 }
             }
-            
+
             // 创建配置的深拷贝
             const configToSave = JSON.parse(JSON.stringify(currentConfig.value));
-            
+
             const existingIndex = slaveConfigs.value.findIndex(config => config.name === configToSave.name);
             if (existingIndex !== -1) {
                 slaveConfigs.value[existingIndex] = configToSave;
             } else {
                 slaveConfigs.value.push(configToSave);
             }
-            
+
             localStorage.setItem('slaveConfigs', JSON.stringify(slaveConfigs.value));
             configDialogVisible.value = false;
             ElMessage.success('配置已保存');
@@ -1362,15 +1353,15 @@ export default {
                 ElMessage.warning('请先建立连接');
                 return;
             }
-            
+
             try {
                 const message = generateSlaveConfigMessage(config);
                 console.log('发送从机配置:', Array.from(message).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '));
-                
+
                 // 设置等待状态
                 isWaitingConfigResponse.value = true;
                 currentConfigName.value = config.name;
-                
+
                 // 设置超时
                 if (configResponseTimeout.value) {
                     clearTimeout(configResponseTimeout.value);
@@ -1381,7 +1372,7 @@ export default {
                         ElMessage.error('配置响应超时');
                     }
                 }, 10000); // 1秒超时
-                
+
                 await window.electronAPI.sendUdpData(message);
             } catch (error) {
                 isWaitingConfigResponse.value = false;
@@ -1412,8 +1403,8 @@ export default {
             }
 
             try {
-                // 设备列表请求消息
-                const message = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x05, 0x00]);
+                // 设备列表请求消息：AB CD 02 00 00 02 00 11 00
+                const message = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x11, 0x00]);
                 console.log('发送设备列表请求:', Array.from(message).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '));
                 await window.electronAPI.sendUdpData(message);
             } catch (error) {
@@ -1782,7 +1773,8 @@ export default {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 500px;  /* 设置最小宽度确保内容不会挤压 */
+    min-width: 500px;
+    /* 设置最小宽度确保内容不会挤压 */
 }
 
 /* 配置管理容器样式 */
@@ -1803,7 +1795,8 @@ export default {
 
 /* 调整表格容器样式 */
 .log-table-container {
-    height: calc(100% - 60px);  /* 减去控制面板的高度 */
+    height: calc(100% - 60px);
+    /* 减去控制面板的高度 */
     overflow: auto;
 }
 
@@ -1824,7 +1817,8 @@ export default {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 500px;  /* 设置最小宽度确保内容不会挤压 */
+    min-width: 500px;
+    /* 设置最小宽度确保内容不会挤压 */
 }
 
 /* 调整表格固定列的样式 */
@@ -1842,7 +1836,8 @@ export default {
 
 .el-container {
     flex: 1;
-    min-height: 0;  /* 允许容器收缩 */
+    min-height: 0;
+    /* 允许容器收缩 */
 }
 
 .el-main {
