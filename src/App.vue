@@ -6,8 +6,8 @@
                     <el-col :span="4">
                         <el-select v-model="communicationType" placeholder="通信方式"
                             @change="handleCommunicationTypeChange">
-                            <el-option label="串口" value="serial" />
                             <el-option label="UDP" value="udp" />
+                            <el-option label="串口" value="serial" />
                         </el-select>
                     </el-col>
                     <!-- 串口配置 -->
@@ -26,21 +26,9 @@
                             <el-option v-for="rate in baudRates" :key="rate" :label="rate" :value="rate" />
                         </el-select>
                     </el-col>
-                    <!-- UDP配置 -->
-                    <el-col :span="6" v-if="communicationType === 'udp'">
-                        <el-input v-model="udpConfig.localPort" placeholder="本地端口">
-                            <template #prepend>本地端口</template>
-                        </el-input>
-                    </el-col>
-                    <el-col :span="6" v-if="communicationType === 'udp'">
-                        <el-input v-model="udpConfig.remoteIp" placeholder="远程IP">
-                            <template #prepend>远程IP</template>
-                        </el-input>
-                    </el-col>
-                    <el-col :span="6" v-if="communicationType === 'udp'">
-                        <el-input v-model="udpConfig.remotePort" placeholder="远程端口">
-                            <template #prepend>远程端口</template>
-                        </el-input>
+                    <!-- UDP配置按钮 -->
+                    <el-col :span="4" v-if="communicationType === 'udp'">
+                        <el-button type="primary" @click="showUdpConfigDialog">UDP配置</el-button>
                     </el-col>
                     <!-- 连接按钮 -->
                     <el-col :span="4">
@@ -386,6 +374,34 @@
                 </div>
             </el-dialog>
 
+            <!-- UDP配置对话框 -->
+            <el-dialog v-model="udpConfigDialogVisible" title="UDP配置" width="400px" align-center>
+                <el-form :model="udpConfig" label-width="100px">
+                    <el-form-item label="本地端口" :rules="[
+                        { required: true, message: '请输入本地端口' },
+                        { type: 'number', min: 1, max: 65535, message: '端口范围: 1-65535' }
+                    ]">
+                        <el-input-number v-model="udpConfig.localPort" :min="1" :max="65535" style="width: 100%" />
+                    </el-form-item>
+                    <el-form-item label="远程IP" :rules="[
+                        { required: true, message: '请输入远程IP地址' },
+                        { pattern: /^(\d{1,3}\.){3}\d{1,3}$/, message: '请输入有效的IP地址' }
+                    ]">
+                        <el-input v-model="udpConfig.remoteIp" placeholder="例如: 192.168.1.100" />
+                    </el-form-item>
+                    <el-form-item label="远程端口" :rules="[
+                        { required: true, message: '请输入远程端口' },
+                        { type: 'number', min: 1, max: 65535, message: '端口范围: 1-65535' }
+                    ]">
+                        <el-input-number v-model="udpConfig.remotePort" :min="1" :max="65535" style="width: 100%" />
+                    </el-form-item>
+                </el-form>
+                <template #footer>
+                    <el-button @click="udpConfigDialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="saveUdpConfig">保存并连接</el-button>
+                </template>
+            </el-dialog>
+
             <!-- 从机配置对话框 -->
             <el-dialog v-model="configDialogVisible" title="从机配置管理" width="80%">
                 <el-form :model="currentConfig" label-width="120px">
@@ -578,7 +594,7 @@ export default {
         };
 
         // 通信方式选择
-        const communicationType = ref('serial');
+        const communicationType = ref('udp');
         const isConnected = ref(false);
 
         // 处理通信方式变更
@@ -620,39 +636,9 @@ export default {
                             ElMessage.error('打开串口失败：' + result.error);
                         }
                     } else if (communicationType.value === 'udp') {
-                        // 验证输入
-                        const localPort = parseInt(udpConfig.value.localPort);
-                        const remotePort = parseInt(udpConfig.value.remotePort);
-
-                        if (isNaN(localPort) || localPort <= 0 || localPort > 65535) {
-                            ElMessage.error('本地端口必须是1-65535之间的数字');
-                            return;
-                        }
-
-                        if (isNaN(remotePort) || remotePort <= 0 || remotePort > 65535) {
-                            ElMessage.error('远程端口必须是1-65535之间的数字');
-                            return;
-                        }
-
-                        // 验证IP地址
-                        const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
-                        if (!ipRegex.test(udpConfig.value.remoteIp)) {
-                            ElMessage.error('请输入有效的IP地址');
-                            return;
-                        }
-
-                        const result = await window.electronAPI.createUdpSocket({
-                            localPort,
-                            remoteIp: udpConfig.value.remoteIp,
-                            remotePort
-                        });
-
-                        if (result.success) {
-                            isConnected.value = true;
-                            ElMessage.success('UDP已连接');
-                        } else {
-                            ElMessage.error('UDP连接失败：' + result.error);
-                        }
+                        // UDP模式下，显示配置弹出框
+                        showUdpConfigDialog();
+                        return;
                     }
                 } else {
                     await disconnectCurrent();
@@ -1156,6 +1142,14 @@ export default {
             }
         };
 
+        // 从localStorage加载UDP配置
+        const loadUdpConfig = () => {
+            const savedConfig = localStorage.getItem('udpConfig');
+            if (savedConfig) {
+                udpConfig.value = JSON.parse(savedConfig);
+            }
+        };
+
         // 保存表格配置到localStorage
         const saveTableConfig = () => {
             localStorage.setItem('tableConfig', JSON.stringify(tableConfig.value));
@@ -1249,10 +1243,11 @@ export default {
 
         // UDP相关
         const udpConfig = ref({
-            localPort: '8080',
-            remoteIp: '192.168.0.2',
-            remotePort: '8080'
+            localPort: 8080,
+            remoteIp: '192.168.1.100',
+            remotePort: 8080
         });
+        const udpConfigDialogVisible = ref(false);
 
         // 添加SLAVE_CFG_MSG配置管理
         const slaveConfigs = ref([]);  // 保存所有配置
@@ -1453,6 +1448,68 @@ export default {
             configDialogVisible.value = true;
         };
 
+        // 显示UDP配置弹出框
+        const showUdpConfigDialog = () => {
+            udpConfigDialogVisible.value = true;
+        };
+
+        // 保存UDP配置并连接
+        const saveUdpConfig = async () => {
+            // 验证配置
+            if (!udpConfig.value.localPort || udpConfig.value.localPort < 1 || udpConfig.value.localPort > 65535) {
+                ElMessage.error('本地端口必须是1-65535之间的数字');
+                return;
+            }
+
+            if (!udpConfig.value.remotePort || udpConfig.value.remotePort < 1 || udpConfig.value.remotePort > 65535) {
+                ElMessage.error('远程端口必须是1-65535之间的数字');
+                return;
+            }
+
+            // 验证IP地址
+            const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/;
+            if (!ipRegex.test(udpConfig.value.remoteIp)) {
+                ElMessage.error('请输入有效的IP地址');
+                return;
+            }
+
+            // 验证IP地址的每个段
+            const ipParts = udpConfig.value.remoteIp.split('.');
+            for (const part of ipParts) {
+                const num = parseInt(part);
+                if (num < 0 || num > 255) {
+                    ElMessage.error('IP地址每段必须在0-255之间');
+                    return;
+                }
+            }
+
+            try {
+                // 如果已连接，先断开
+                if (isConnected.value) {
+                    await disconnectCurrent();
+                }
+
+                const result = await window.electronAPI.createUdpSocket({
+                    localPort: udpConfig.value.localPort,
+                    remoteIp: udpConfig.value.remoteIp,
+                    remotePort: udpConfig.value.remotePort
+                });
+
+                if (result.success) {
+                    isConnected.value = true;
+                    udpConfigDialogVisible.value = false;
+                    ElMessage.success('UDP已连接');
+                    
+                    // 保存配置到localStorage
+                    localStorage.setItem('udpConfig', JSON.stringify(udpConfig.value));
+                } else {
+                    ElMessage.error('UDP连接失败：' + result.error);
+                }
+            } catch (error) {
+                ElMessage.error('连接失败：' + error.message);
+            }
+        };
+
         // 检测模式切换函数
         const switchDetectionMode = async () => {
             if (!isConnected.value) {
@@ -1505,6 +1562,7 @@ export default {
             window.electronAPI.onUdpData(handleUdpData);
             loadTableConfig();
             loadSavedConfigs();
+            loadUdpConfig();
             offlineCheckTimer = setInterval(checkDeviceStatus, 1000); // 每秒检查一次
         });
 
@@ -1580,7 +1638,10 @@ export default {
             currentConfigName,
             detectionMode,
             isWaitingModeResponse,
-            switchDetectionMode
+            switchDetectionMode,
+            udpConfigDialogVisible,
+            showUdpConfigDialog,
+            saveUdpConfig
         };
     }
 };
