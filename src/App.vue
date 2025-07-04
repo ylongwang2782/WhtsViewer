@@ -519,6 +519,7 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import packageInfo from '../package.json';  // 导入package.json获取版本号
+import { whtsBackend } from './protocol/whts-backend.js';  // 导入协议库
 
 export default {
     name: 'SerialPortAssistant',
@@ -678,39 +679,7 @@ export default {
             }
         };
 
-        // 添加Whts包类型映射
-        const PACKET_TYPES = {
-            0x00: 'Master2Slave',
-            0x01: 'Slave2Master',
-            0x02: 'Backend2Master',
-            0x03: 'Master2Backend',
-            0x04: 'Slave2Backend'
-        };
-
-        const getPacketTypeName = (packetId) => {
-            return PACKET_TYPES[packetId] || `Unknown(0x${packetId.toString(16).toUpperCase()})`;
-        };
-
-        // 修改Master2Backend消息类型映射，添加SLAVE_CFG_RSP_MSG
-        const MASTER2BACKEND_MSG_TYPES = {
-            0x00: 'SLAVE_CFG_RSP_MSG',    // 修改这里，原来是SLAVE_CFG_MSG
-            0x01: 'MODE_CFG_MSG',
-            0x02: 'RST_MSG',
-            0x03: 'CTRL_MSG',
-            0x05: 'DEVICE_LIST_RSP_MSG',
-            0x10: 'PING_RES_MSG'
-        };
-
-        const getMsgTypeName = (msgId) => {
-            return MASTER2BACKEND_MSG_TYPES[msgId] || `Unknown(0x${msgId.toString(16).toUpperCase()})`;
-        };
-
-        // 添加Slave2Backend消息类型映射
-        const SLAVE2BACKEND_MSG_TYPES = {
-            0x00: 'CONDUCTION_DATA_MSG',
-            0x01: 'RESISTANCE_DATA_MSG',
-            0x02: 'CLIP_DATA_MSG'
-        };
+        // 协议相关的常量和函数现在通过协议库提供
 
         // 添加Slave2Backend数据存储
         const slave2BackendLogs = ref(new Map()); // 使用Map来存储最新的Slave2Backend数据，key为SlaveId
@@ -720,20 +689,7 @@ export default {
             return Array.from(slave2BackendLogs.value.values());
         });
 
-        // 添加设备状态位解析函数
-        const parseDeviceStatus = (status) => {
-            return {
-                cs: (status & 0x0001) ? '1' : '0',      // Color Sensor
-                sl: (status & 0x0002) ? '1' : '0',      // Sleeve Limit
-                eub: (status & 0x0004) ? '1' : '0',     // Electromagnet Unlock Button
-                bla: (status & 0x0008) ? '1' : '0',     // Battery Low Alarm
-                ps: (status & 0x0010) ? '1' : '0',      // Pressure Sensor
-                el1: (status & 0x0020) ? '1' : '0',     // Electromagnetic Lock1
-                el2: (status & 0x0040) ? '1' : '0',     // Electromagnetic Lock2
-                a1: (status & 0x0080) ? '1' : '0',      // Accessory1
-                a2: (status & 0x0100) ? '1' : '0'       // Accessory2
-            };
-        };
+        // 设备状态位解析函数现在通过协议库提供
 
         // 添加设备掉线检测配置
         const offlineTimeout = ref(5000); // 默认5秒超时
@@ -776,7 +732,7 @@ export default {
             try {
                 isWaitingResponse.value = true;
                 const runningStatus = !isRunning.value ? 1 : 0; // 切换状态
-                const ctrlCmd = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x03, runningStatus]);
+                const ctrlCmd = whtsBackend.createCtrlMessage(runningStatus);
 
                 await window.electronAPI.sendUdpData(ctrlCmd);
 
@@ -798,170 +754,118 @@ export default {
             }
         };
 
-        // 修改handleUdpData函数，添加对Master2Backend Ctrl Message的处理
+        // 修改handleUdpData函数，使用协议库
         const handleUdpData = (event, { data }) => {
             console.log('UDP data received:', data);
 
-            const whtsFrame = parseWhtsData(data);
-            if (whtsFrame) {
-                const logEntry = {
-                    packetId: getPacketTypeName(whtsFrame.packetId),
-                    message: whtsFrame.msgType || '--',
-                    slaveId: whtsFrame.slaveId || '--',
-                    deviceStatus: whtsFrame.deviceStatus || '--',
-                    context: whtsFrame.msgType ? whtsFrame.msgPayload : whtsFrame.payload,
-                    timestamp: new Date().toLocaleTimeString()
-                };
+            const parsedData = whtsBackend.parseReceivedData(data);
+            
+            // 构建日志条目
+            const logEntry = {
+                packetId: parsedData.packetType,
+                message: parsedData.message,
+                slaveId: parsedData.slaveId,
+                deviceStatus: parsedData.deviceStatus,
+                context: parsedData.payload,
+                timestamp: parsedData.timestamp
+            };
 
-                if (whtsFrame.packetId === 0x04) {
-                    const deviceStatusBits = parseDeviceStatus(parseInt(whtsFrame.deviceStatus.slice(2), 16));
+            // 处理Slave2Backend消息
+            if (whtsBackend.isSlave2BackendMessage(parsedData)) {
+                const slaveId = whtsBackend.getSlaveId(parsedData);
+                const deviceStatusBits = whtsBackend.getDeviceStatusBits(parsedData);
 
+                if (deviceStatusBits) {
                     // 更新设备最后通信时间
-                    deviceLastUpdateTime.value.set(whtsFrame.slaveId, Date.now());
-                    deviceOnlineStatus.value.set(whtsFrame.slaveId, true);
+                    deviceLastUpdateTime.value.set(slaveId, Date.now());
+                    deviceOnlineStatus.value.set(slaveId, true);
 
-                    slave2BackendLogs.value.set(whtsFrame.slaveId, {
+                    slave2BackendLogs.value.set(slaveId, {
                         ...logEntry,
                         lastUpdate: new Date().toLocaleTimeString(),
                         ...deviceStatusBits,
                         isOffline: false
                     });
 
-                    // 对于CONDUCTION_DATA_MSG，更新而不是追加到主日志
-                    if (whtsFrame.msgType === 'CONDUCTION_DATA_MSG') {
-                        // 查找并更新现有的CONDUCTION_DATA_MSG条目
+                    // 对于导通数据消息，更新而不是追加到主日志
+                    if (whtsBackend.isConductionDataMessage(parsedData)) {
                         const existingIndex = logs.value.findIndex(log =>
-                            log.slaveId === whtsFrame.slaveId &&
+                            log.slaveId === slaveId &&
                             log.message === 'CONDUCTION_DATA_MSG'
                         );
 
                         if (existingIndex !== -1) {
-                            // 更新现有条目
                             logs.value[existingIndex] = logEntry;
                         } else {
-                            // 如果不存在，则添加新条目
                             logs.value.push(logEntry);
                         }
                     } else {
-                        // 其他类型的Slave2Backend消息正常添加
-                        logs.value.push(logEntry);
-                    }
-                } else {
-                    // 处理Master2Backend的Ctrl Message响应
-                    if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'CTRL_MSG' && isWaitingResponse.value) {
-                        isWaitingResponse.value = false;
-                        if (responseTimeout.value) {
-                            clearTimeout(responseTimeout.value);
-                        }
-
-                        const payload = whtsFrame.msgPayload.split(' ');
-                        if (payload.length >= 2) {
-                            const status = parseInt(payload[0], 16);
-                            const runningStatus = parseInt(payload[1], 16);
-
-                            if (status === 0) { // 响应正常
-                                isRunning.value = runningStatus === 1;
-                                ElMessage.success(`主机已${isRunning.value ? '开启' : '停止'}`);
-                            } else { // 响应异常
-                                ElMessage.error('主机响应异常');
-                            }
-                        }
-                    } else if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'SLAVE_CFG_RSP_MSG' && isWaitingConfigResponse.value) {
-                        // 清除配置响应等待状态
-                        isWaitingConfigResponse.value = false;
-                        if (configResponseTimeout.value) {
-                            clearTimeout(configResponseTimeout.value);
-                        }
-
-                        const payload = whtsFrame.msgPayload.split(' ');
-                        if (payload.length >= 1) {
-                            const status = parseInt(payload[0], 16);
-                            if (status === 0) { // 响应正常
-                                ElMessage.success('配置已成功应用');
-                            } else { // 响应异常
-                                ElMessage.error('配置应用失败');
-                            }
-                        }
-                    } else if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'MODE_CFG_MSG' && isWaitingModeResponse.value) {
-                        // 处理模式切换响应
-                        isWaitingModeResponse.value = false;
-                        if (modeResponseTimeout.value) {
-                            clearTimeout(modeResponseTimeout.value);
-                        }
-
-                        const payload = whtsFrame.msgPayload.split(' ');
-                        if (payload.length >= 2) {
-                            const status = parseInt(payload[0], 16);
-                            const currentMode = parseInt(payload[1], 16);
-
-                            if (status === 0) { // 响应正常
-                                const modeNames = ['导通检测模式', '阻值检测模式', '卡钉检测模式'];
-                                const modeName = modeNames[currentMode] || '未知模式';
-                                ElMessage.success(`模式已切换至：${modeName}`);
-                                detectionMode.value = currentMode.toString();
-                            } else { // 响应异常
-                                ElMessage.error('模式切换失败');
-                            }
-                        }
-                    } else if (whtsFrame.packetId === 0x03 && whtsFrame.msgType === 'DEVICE_LIST_RSP_MSG') {
-                        const payload = new Uint8Array(data).slice(8); // 跳过帧头和长度等字段
-                        const deviceCount = payload[0];
-                        const devices = [];
-
-                        let offset = 1; // 跳过设备数量字段
-                        for (let i = 0; i < deviceCount; i++) {
-                            // 解析设备ID (4字节，小端)
-                            const deviceIdBytes = payload.slice(offset, offset + 4);
-                            const deviceId = Array.from(deviceIdBytes).reverse()
-                                .map(b => b.toString(16).padStart(2, '0')).join('');
-                            offset += 4;
-
-                            // 解析短ID (1字节)
-                            const shortId = payload[offset];
-                            offset += 1;
-
-                            // 解析在线状态 (1字节)
-                            const online = payload[offset] === 1;
-                            offset += 1;
-
-                            // 解析版本号
-                            const versionMajor = payload[offset];
-                            const versionMinor = payload[offset + 1];
-                            // 补丁版本号 (2字节，小端)
-                            const versionPatch = payload[offset + 2] | (payload[offset + 3] << 8);
-                            offset += 4;
-
-                            devices.push({
-                                deviceId,
-                                shortId,
-                                online,
-                                versionMajor,
-                                versionMinor,
-                                versionPatch,
-                                lastUpdate: new Date().toLocaleString()
-                            });
-                        }
-
-                        deviceList.value = devices;
-                        ElMessage.success(`查询到 ${deviceCount} 个设备`);
-                    } else {
-                        // 非Slave2Backend包正常添加到日志
                         logs.value.push(logEntry);
                     }
                 }
-            } else {
-                const hexData = Array.from(new Uint8Array(data))
-                    .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
-                    .join(' ');
+            } 
+            // 处理Master2Backend响应
+            else if (whtsBackend.isCtrlResponse(parsedData) && isWaitingResponse.value) {
+                isWaitingResponse.value = false;
+                if (responseTimeout.value) {
+                    clearTimeout(responseTimeout.value);
+                }
 
-                logs.value.push({
-                    packetId: 'Invalid Frame',
-                    message: '--',
-                    slaveId: '--',
-                    deviceStatus: '--',
-                    context: hexData,
-                    timestamp: new Date().toLocaleTimeString()
-                });
+                const parsedMsg = whtsBackend.getParsedData(parsedData);
+                if (parsedMsg) {
+                    if (parsedMsg.status === 0) {
+                        isRunning.value = parsedMsg.runningStatus === 1;
+                        ElMessage.success(`主机已${parsedMsg.runningText}`);
+                    } else {
+                        ElMessage.error('主机响应异常');
+                    }
+                }
+            } 
+            else if (whtsBackend.isSlaveConfigResponse(parsedData) && isWaitingConfigResponse.value) {
+                isWaitingConfigResponse.value = false;
+                if (configResponseTimeout.value) {
+                    clearTimeout(configResponseTimeout.value);
+                }
+
+                const parsedMsg = whtsBackend.getParsedData(parsedData);
+                if (parsedMsg) {
+                    if (parsedMsg.status === 0) {
+                        ElMessage.success('配置已成功应用');
+                    } else {
+                        ElMessage.error('配置应用失败');
+                    }
+                }
+            } 
+            else if (whtsBackend.isModeConfigResponse(parsedData) && isWaitingModeResponse.value) {
+                isWaitingModeResponse.value = false;
+                if (modeResponseTimeout.value) {
+                    clearTimeout(modeResponseTimeout.value);
+                }
+
+                const parsedMsg = whtsBackend.getParsedData(parsedData);
+                if (parsedMsg) {
+                    if (parsedMsg.status === 0) {
+                        ElMessage.success(`模式已切换至：${parsedMsg.modeText}`);
+                        detectionMode.value = parsedMsg.mode.toString();
+                    } else {
+                        ElMessage.error('模式切换失败');
+                    }
+                }
+            } 
+            else if (whtsBackend.isDeviceListResponse(parsedData)) {
+                const parsedMsg = whtsBackend.getParsedData(parsedData);
+                if (parsedMsg) {
+                    const devices = parsedMsg.devices.map(device => ({
+                        ...device,
+                        lastUpdate: new Date().toLocaleString()
+                    }));
+                    deviceList.value = devices;
+                    ElMessage.success(`查询到 ${parsedMsg.deviceCount} 个设备`);
+                }
+            } 
+            else {
+                // 其他消息正常添加到日志
+                logs.value.push(logEntry);
             }
 
             // 更新分页
@@ -971,97 +875,20 @@ export default {
             }
         };
 
-        // 修改parseWhtsData函数中解析Slave2Backend的部分
-        const parseWhtsData = (data) => {
-            const bytes = new Uint8Array(data);
-
-            // 检查数据长度是否足够
-            if (bytes.length < 7) {
-                console.log('Data too short for Whts protocol');
-                return null;
-            }
-
-            // 检查帧头
-            if (bytes[0] !== 0xAB || bytes[1] !== 0xCD) {
-                console.log('Invalid frame header');
-                return null;
-            }
-
-            // 获取PacketID
-            const packetId = bytes[2];
-
-            // 获取数据长度（小端格式）
-            const length = bytes[6] << 8 | bytes[5];
-
-            // 检查数据长度是否合理
-            if (length + 7 > bytes.length) {
-                console.log('Invalid data length');
-                return null;
-            }
-
-            // 解析消息
-            let msgType = null;
-            let msgPayload = null;
-            let slaveId = null;
-            let deviceStatus = null;
-
-            if (packetId === 0x03 && length > 0) { // Master2Backend packet
-                const messageId = bytes[7];
-                msgType = getMsgTypeName(messageId);
-                msgPayload = Array.from(bytes.slice(8, 7 + length))
-                    .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
-                    .join(' ');
-            } else if (packetId === 0x04 && length >= 7) { // Slave2Backend packet
-                const messageId = bytes[7];
-                msgType = SLAVE2BACKEND_MSG_TYPES[messageId] || `Unknown(0x${messageId.toString(16).toUpperCase()})`;
-
-                // 解析Slave ID (4字节，小端)
-                slaveId = bytes[8] | (bytes[9] << 8) | (bytes[10] << 16) | (bytes[11] << 24);
-
-                // 解析Device Status (2字节)
-                deviceStatus = bytes[12] | (bytes[13] << 8);
-
-                if (messageId === 0x00) { // CONDUCTION_DATA_MSG
-                    // 解析导通数据长度（2字节）
-                    const conductionLength = bytes[14] | (bytes[15] << 8);
-
-                    // 只提取导通数据部分（不包含长度字段）
-                    msgPayload = Array.from(bytes.slice(16, 14 + conductionLength + 2))
-                        .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
-                        .join(' ');
-                } else {
-                    // 其他消息类型的处理保持不变
-                    msgPayload = Array.from(bytes.slice(14, 7 + length))
-                        .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
-                        .join(' ');
-                }
-            }
-
-            // 提取完整Payload
-            const payload = Array.from(bytes.slice(7, 7 + length))
-                .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
-                .join(' ');
-
-            return {
-                packetId,
-                payload,
-                msgType,
-                msgPayload,
-                slaveId: slaveId !== null ? `0x${slaveId.toString(16).toUpperCase()}` : null,
-                deviceStatus: deviceStatus !== null ? `0x${deviceStatus.toString(16).toUpperCase()}` : null
-            };
-        };
+        // parseWhtsData函数现在由协议库提供
 
         // 处理串口数据
         const handleSerialData = (event, data) => {
             // 将接收到的数据转换为十六进制字符串
-            const hexData = Array.from(new Uint8Array(data))
-                .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
-                .join(' ');
+            const hexData = whtsBackend.bytesToHexString(new Uint8Array(data));
 
             logs.value.push({
                 packetId: '--',  // 不解析，直接显示占位符
-                context: hexData // 直接显示原始数据
+                message: '--',
+                slaveId: '--',
+                deviceStatus: '--',
+                context: hexData, // 直接显示原始数据
+                timestamp: new Date().toLocaleTimeString()
             });
 
             // 如果在最后一页，自动跳转到新的最后一页
@@ -1173,16 +1000,15 @@ export default {
             }
 
             // 验证和处理十六进制命令
-            const hexString = hexCommand.value.replace(/\s+/g, '');
-            if (!/^[0-9A-Fa-f]+$/.test(hexString)) {
+            if (!whtsBackend.validateHexString(hexCommand.value)) {
                 ElMessage.error('请输入有效的十六进制命令');
                 return;
             }
 
             try {
-                const hexArray = new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                const hexArray = whtsBackend.hexStringToBytes(hexCommand.value);
                 // 添加日志输出
-                console.log('发送十六进制命令:', Array.from(hexArray).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '));
+                console.log('发送十六进制命令:', whtsBackend.bytesToHexString(hexArray));
 
                 if (communicationType.value === 'serial') {
                     await window.electronAPI.writePort(hexArray);
@@ -1196,50 +1022,7 @@ export default {
             }
         };
 
-        // Whts 协议解析
-        const parseWhtsFrame = (data) => {
-            if (data.length < 7) { // 最小帧长度：帧头(2) + PacketID(1) + Sequence(1) + Flag(1) + Length(2)
-                return null;
-            }
-
-            // 查找帧头
-            let frameStart = -1;
-            for (let i = 0; i < data.length - 1; i++) {
-                if (data[i] === 0xAB && data[i + 1] === 0xCD) {
-                    frameStart = i;
-                    break;
-                }
-            }
-
-            if (frameStart === -1) {
-                return null;
-            }
-
-            // 确保有足够的数据来读取长度字段
-            if (frameStart + 6 >= data.length) {
-                return null;
-            }
-
-            const frame = {
-                packetId: data[frameStart + 2],
-                sequence: data[frameStart + 3],
-                moreFragments: data[frameStart + 4],
-                length: (data[frameStart + 5] << 8) | data[frameStart + 6],
-                payload: ''
-            };
-
-            // 验证数据长度
-            const totalLength = frameStart + 7 + frame.length;
-            if (totalLength > data.length) {
-                return null;
-            }
-
-            // 提取payload并转换为十六进制字符串
-            const payloadArray = Array.from(data.slice(frameStart + 7, totalLength));
-            frame.payload = payloadArray.map(byte => byte.toString(16).toUpperCase().padStart(2, '0')).join(' ');
-
-            return frame;
-        };
+        // Whts协议解析现在由协议库提供
 
         // UDP相关
         const udpConfig = ref({
@@ -1283,54 +1066,7 @@ export default {
             return hexPattern.test(value);
         };
 
-        // 修改生成消息的函数
-        const generateSlaveConfigMessage = (config) => {
-            const data = [];
-
-            // Message ID (SLAVE_CFG_MSG = 0x00) 先加入，这样它也会被计入长度
-            data.push(0x00);
-
-            // Slave数量
-            data.push(config.slaves.length);
-
-            config.slaves.forEach(slave => {
-                // Slave ID (4 bytes)
-                const idBytes = [];
-                for (let i = 0; i < 8; i += 2) {
-                    idBytes.push(parseInt(slave.id.slice(i, i + 2), 16));
-                }
-                // 小端序，需要反转字节顺序
-                data.push(...idBytes.reverse());
-
-                // Conduction Num (1 byte)
-                data.push(parseInt(slave.conductionNum, 16));
-
-                // Resistance Num (1 byte)
-                data.push(parseInt(slave.resistanceNum, 16));
-
-                // Clip Mode (1 byte)
-                data.push(parseInt(slave.clipMode, 16));
-
-                // Clip Status (2 bytes, little endian)
-                const statusValue = parseInt(slave.clipStatus, 16);
-                data.push(statusValue & 0xFF);
-                data.push((statusValue >> 8) & 0xFF);
-            });
-
-            // 计算总长度（包含Message ID）
-            const messageLength = data.length;
-
-            // 构建完整消息
-            const fullMessage = [
-                0xAB, 0xCD,         // Frame Header
-                0x02,               // Packet ID (Backend2Master)
-                0x00, 0x00,         // Sequence & Flag
-                messageLength, 0x00, // Length (little endian)
-                ...data             // Message ID + Payload
-            ];
-
-            return new Uint8Array(fullMessage);
-        };
+        // 从机配置消息生成现在由协议库提供
 
         // 修改保存配置前的验证
         const saveConfig = () => {
@@ -1378,7 +1114,7 @@ export default {
             currentConfig.value.slaves.splice(index, 1);
         };
 
-        // 修改发送配置函数，添加等待响应逻辑
+        // 修改发送配置函数，使用协议库
         const sendSlaveConfig = async (config) => {
             if (!isConnected.value) {
                 ElMessage.warning('请先建立连接');
@@ -1386,8 +1122,8 @@ export default {
             }
 
             try {
-                const message = generateSlaveConfigMessage(config);
-                console.log('发送从机配置:', Array.from(message).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '));
+                const message = whtsBackend.createSlaveConfigMessage(config.slaves);
+                console.log('发送从机配置:', whtsBackend.bytesToHexString(message));
 
                 // 设置等待状态
                 isWaitingConfigResponse.value = true;
@@ -1402,7 +1138,7 @@ export default {
                         isWaitingConfigResponse.value = false;
                         ElMessage.error('配置响应超时');
                     }
-                }, 10000); // 1秒超时
+                }, 10000); // 10秒超时
 
                 await window.electronAPI.sendUdpData(message);
             } catch (error) {
@@ -1434,9 +1170,8 @@ export default {
             }
 
             try {
-                // 设备列表请求消息：AB CD 02 00 00 02 00 11 00
-                const message = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x11, 0x00]);
-                console.log('发送设备列表请求:', Array.from(message).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '));
+                const message = whtsBackend.createDeviceListRequestMessage();
+                console.log('发送设备列表请求:', whtsBackend.bytesToHexString(message));
                 await window.electronAPI.sendUdpData(message);
             } catch (error) {
                 ElMessage.error('发送失败：' + error.message);
@@ -1520,11 +1255,10 @@ export default {
             try {
                 isWaitingModeResponse.value = true;
                 
-                // 构建模式切换命令: AB CD 02 00 00 02 00 01 [mode]
                 const modeValue = parseInt(detectionMode.value);
-                const modeCmd = new Uint8Array([0xAB, 0xCD, 0x02, 0x00, 0x00, 0x02, 0x00, 0x01, modeValue]);
+                const modeCmd = whtsBackend.createModeConfigMessage(modeValue);
                 
-                console.log('发送模式切换命令:', Array.from(modeCmd).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' '));
+                console.log('发送模式切换命令:', whtsBackend.bytesToHexString(modeCmd));
                 
                 await window.electronAPI.sendUdpData(modeCmd);
 
