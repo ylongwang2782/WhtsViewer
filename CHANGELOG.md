@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.5.0](https://github.com/ylongwang2782/WhtsViewer/compare/v1.4.0...v1.5.0) (2025-07-04)
+
+
+### ✨ Features
+
+* **protocol:** 添加Whts协议库，重构协议相关逻辑 ([119cc55](https://github.com/ylongwang2782/WhtsViewer/commit/119cc5524cd859a1f5922bb3ae89e46cf590aa57))
+* 新增ping-pong 功能，可以非常方便测试无线网络性能 close [#8](https://github.com/ylongwang2782/WhtsViewer/issues/8) ([1107d47](https://github.com/ylongwang2782/WhtsViewer/commit/1107d47869f1fe2604e7bd5f21282311fd1326b0))
+
 ## [1.4.0](https://github.com/ylongwang2782/WhtsViewer/compare/v1.3.0...v1.4.0) (2025-07-04)
 
 
