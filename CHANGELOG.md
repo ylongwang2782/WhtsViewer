@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [1.4.0](https://github.com/ylongwang2782/WhtsViewer/compare/v1.3.0...v1.4.0) (2025-07-04)
+
+
+### 🐛 Bug Fixes
+
+* 修复了查询设备列表功能失效的问题 ([ff1e657](https://github.com/ylongwang2782/WhtsViewer/commit/ff1e657851237ec5d11e09bb79c0d3b542c40fa1)), closes [#6](https://github.com/ylongwang2782/WhtsViewer/issues/6)
+
+
+### ✨ Features
+
+* 新增检测模式切换功能 ([d12dfac](https://github.com/ylongwang2782/WhtsViewer/commit/d12dfacf5a26105cab536ad46943f1aba45006fa))
+
 ## [1.3.0](https://github.com/ylongwang2782/WhtsViewer/compare/v1.2.0...v1.3.0) (2025-06-11)
 
 
