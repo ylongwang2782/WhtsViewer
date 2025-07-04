@@ -72,6 +72,11 @@ export class WhtsBackendProtocol {
         return Backend2MasterMessageBuilder.buildDeviceListRequestMessage();
     }
 
+    // 创建Ping控制消息
+    createPingCtrlMessage(pingMode, pingCount, interval, destinationId) {
+        return Backend2MasterMessageBuilder.buildPingCtrlMessage(pingMode, pingCount, interval, destinationId);
+    }
+
     // 检查是否为Master2Backend控制响应
     isCtrlResponse(parsedData) {
         return parsedData.isValid && 
@@ -98,6 +103,13 @@ export class WhtsBackendProtocol {
         return parsedData.isValid && 
                parsedData.rawFrame?.packetId === PROTOCOL_CONSTANTS.PACKET_TYPES.MASTER_TO_BACKEND &&
                parsedData.parsedMessage?.messageName === 'DEVICE_LIST_RSP_MSG';
+    }
+
+    // 检查是否为Master2Backend Ping响应
+    isPingResponse(parsedData) {
+        return parsedData.isValid && 
+               parsedData.rawFrame?.packetId === PROTOCOL_CONSTANTS.PACKET_TYPES.MASTER_TO_BACKEND &&
+               parsedData.parsedMessage?.messageName === 'PING_RES_MSG';
     }
 
     // 检查是否为Slave2Backend消息
@@ -161,6 +173,21 @@ export class WhtsBackendProtocol {
         return Array.from(bytes)
             .map(byte => byte.toString(16).toUpperCase().padStart(2, '0'))
             .join(' ');
+    }
+
+    // 解析设备ID字符串为数值
+    parseDeviceIdToNumber(deviceIdString) {
+        // 移除0x前缀（如果有）并解析为数值
+        const cleanId = deviceIdString.replace(/^0x/i, '');
+        return parseInt(cleanId, 16);
+    }
+
+    // 格式化设备ID为显示字符串
+    formatDeviceId(deviceId) {
+        if (typeof deviceId === 'string') {
+            return deviceId.toUpperCase();
+        }
+        return deviceId.toString(16).toUpperCase().padStart(8, '0');
     }
 }
 

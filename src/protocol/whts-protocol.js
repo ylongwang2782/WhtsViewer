@@ -246,6 +246,19 @@ export class Backend2MasterMessageBuilder {
         return Backend2MasterMessageBuilder._buildFrame(data);
     }
     
+    // 构建Ping控制消息
+    static buildPingCtrlMessage(pingMode, pingCount, interval, destinationId) {
+        const data = [
+            PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.PING_CTRL_MSG,
+            pingMode, // 0=单次Ping, 1=连续Ping
+            pingCount & 0xFF, (pingCount >> 8) & 0xFF, // Ping次数 (2字节，小端)
+            interval & 0xFF, (interval >> 8) & 0xFF,   // 间隔时间 (2字节，小端)
+            destinationId & 0xFF, (destinationId >> 8) & 0xFF,  // 目标设备ID (4字节，小端)
+            (destinationId >> 16) & 0xFF, (destinationId >> 24) & 0xFF
+        ];
+        return Backend2MasterMessageBuilder._buildFrame(data);
+    }
+    
     // 构建帧的通用方法
     static _buildFrame(payloadData) {
         const frame = new WhtsFrame();
@@ -293,6 +306,9 @@ export class Master2BackendMessageParser {
                 break;
             case PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.DEVICE_LIST_RSP_MSG:
                 result.parsedData = Master2BackendMessageParser._parseDeviceListResponse(messagePayload);
+                break;
+            case PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.PING_RES_MSG:
+                result.parsedData = Master2BackendMessageParser._parsePingResponse(messagePayload);
                 break;
         }
         
@@ -388,6 +404,25 @@ export class Master2BackendMessageParser {
         return {
             deviceCount,
             devices
+        };
+    }
+    
+    // 解析Ping响应
+    static _parsePingResponse(payload) {
+        if (payload.length < 9) return null;
+        
+        const pingMode = payload[0];
+        const totalCount = payload[1] | (payload[2] << 8);
+        const successCount = payload[3] | (payload[4] << 8);
+        const destinationId = payload[5] | (payload[6] << 8) | (payload[7] << 16) | (payload[8] << 24);
+        
+        return {
+            pingMode,
+            totalCount,
+            successCount,
+            destinationId,
+            pingModeText: pingMode === 0 ? '单次Ping' : '连续Ping',
+            successRate: totalCount > 0 ? ((successCount / totalCount) * 100).toFixed(1) + '%' : '0%'
         };
     }
 }

@@ -272,7 +272,22 @@
                         <el-tab-pane label="从机查询">
                             <div class="device-query-container">
                                 <div class="query-header mb-20">
-                                    <el-button type="primary" @click="queryDeviceList">查询设备列表</el-button>
+                                    <el-row :gutter="20">
+                                        <el-col :span="4">
+                                            <el-button type="primary" @click="queryDeviceList">查询设备列表</el-button>
+                                        </el-col>
+                                        <el-col :span="20">
+                                            <div class="ping-config">
+                                                <span>Ping配置：</span>
+                                                <el-input-number v-model="pingConfig.count" :min="1" :max="100" 
+                                                    placeholder="次数" style="width: 200px" />
+                                                <span style="margin: 0 10px;">次，间隔</span>
+                                                <el-input-number v-model="pingConfig.interval" :min="100" :max="5000" :step="100"
+                                                    placeholder="间隔" style="width: 200px" />
+                                                <span style="margin-left: 5px;">ms</span>
+                                            </div>
+                                        </el-col>
+                                    </el-row>
                                 </div>
                                 <div class="device-table-container">
                                     <el-table :data="deviceList" style="width: 100%" border>
@@ -299,9 +314,31 @@
                                                     scope.row.versionPatch }}
                                             </template>
                                         </el-table-column>
-                                        <el-table-column label="最后更新时间" min-width="200">
+                                        <el-table-column label="最后更新时间" width="200">
                                             <template #default="scope">
                                                 {{ scope.row.lastUpdate }}
+                                            </template>
+                                        </el-table-column>
+                                        <el-table-column label="Ping测试" width="200">
+                                            <template #default="scope">
+                                                <el-button size="small" type="primary" 
+                                                    :loading="scope.row.isPinging"
+                                                    :disabled="!scope.row.online || !isConnected"
+                                                    @click="startPingTest(scope.row)">
+                                                    {{ scope.row.isPinging ? 'Ping中...' : 'Ping测试' }}
+                                                </el-button>
+                                            </template>
+                                        </el-table-column>
+                                        <el-table-column label="测试结果" min-width="250">
+                                            <template #default="scope">
+                                                <div v-if="scope.row.pingResult" class="ping-result">
+                                                    <el-tag :type="getPingResultType(scope.row.pingResult.successRate)">
+                                                        {{ scope.row.pingResult.successCount }}/{{ scope.row.pingResult.totalCount }}
+                                                        ({{ scope.row.pingResult.successRate }})
+                                                    </el-tag>
+                                                    <span class="ping-time">{{ scope.row.pingResult.testTime }}</span>
+                                                </div>
+                                                <span v-else class="no-result">--</span>
                                             </template>
                                         </el-table-column>
                                     </el-table>
@@ -857,10 +894,33 @@ export default {
                 if (parsedMsg) {
                     const devices = parsedMsg.devices.map(device => ({
                         ...device,
-                        lastUpdate: new Date().toLocaleString()
+                        lastUpdate: new Date().toLocaleString(),
+                        isPinging: false, // 添加ping状态
+                        pingResult: null  // 添加ping结果
                     }));
                     deviceList.value = devices;
                     ElMessage.success(`查询到 ${parsedMsg.deviceCount} 个设备`);
+                }
+            } 
+            else if (whtsBackend.isPingResponse(parsedData)) {
+                const parsedMsg = whtsBackend.getParsedData(parsedData);
+                if (parsedMsg && currentPingTest.value) {
+                    // 找到对应的设备并更新ping结果
+                    const deviceIndex = deviceList.value.findIndex(device => 
+                        whtsBackend.parseDeviceIdToNumber(device.deviceId) === parsedMsg.destinationId
+                    );
+                    
+                    if (deviceIndex !== -1) {
+                        deviceList.value[deviceIndex].isPinging = false;
+                        deviceList.value[deviceIndex].pingResult = {
+                            ...parsedMsg,
+                            testTime: new Date().toLocaleString()
+                        };
+                        
+                        ElMessage.success(`Ping测试完成: ${parsedMsg.successCount}/${parsedMsg.totalCount} (${parsedMsg.successRate})`);
+                    }
+                    
+                    currentPingTest.value = null;
                 }
             } 
             else {
@@ -1161,6 +1221,15 @@ export default {
 
         // 添加设备列表相关代码
         const deviceList = ref([]);
+        
+        // 添加Ping测试相关状态
+        const pingConfig = ref({
+            count: 5,     // 默认ping 5次
+            interval: 1000 // 默认间隔1秒
+        });
+        
+        const pingTestResults = ref(new Map()); // 存储ping测试结果
+        const currentPingTest = ref(null); // 当前正在进行的ping测试
 
         // 查询设备列表
         const queryDeviceList = async () => {
@@ -1290,6 +1359,67 @@ export default {
         const isWaitingModeResponse = ref(false);
         const modeResponseTimeout = ref(null);
 
+        // Ping测试函数
+        const startPingTest = async (device) => {
+            if (!isConnected.value) {
+                ElMessage.warning('请先建立连接');
+                return;
+            }
+
+            if (device.isPinging) {
+                ElMessage.warning('该设备正在进行Ping测试');
+                return;
+            }
+
+            try {
+                // 设置设备状态为ping中
+                device.isPinging = true;
+                device.pingResult = null;
+
+                // 解析设备ID
+                const destinationId = whtsBackend.parseDeviceIdToNumber(device.deviceId);
+                
+                // 创建ping控制消息
+                const pingMessage = whtsBackend.createPingCtrlMessage(
+                    0, // 单次Ping模式
+                    pingConfig.value.count,
+                    pingConfig.value.interval,
+                    destinationId
+                );
+
+                // 记录当前ping测试
+                currentPingTest.value = {
+                    deviceId: device.deviceId,
+                    startTime: Date.now()
+                };
+
+                console.log('发送Ping测试:', whtsBackend.bytesToHexString(pingMessage));
+                await window.electronAPI.sendUdpData(pingMessage);
+
+                // 设置超时处理
+                setTimeout(() => {
+                    if (device.isPinging && currentPingTest.value?.deviceId === device.deviceId) {
+                        device.isPinging = false;
+                        currentPingTest.value = null;
+                        ElMessage.error('Ping测试超时');
+                    }
+                }, (pingConfig.value.count * pingConfig.value.interval) + 5000); // 额外5秒超时缓冲
+
+            } catch (error) {
+                device.isPinging = false;
+                currentPingTest.value = null;
+                ElMessage.error('Ping测试失败：' + error.message);
+            }
+        };
+
+        // 获取Ping结果的标签类型
+        const getPingResultType = (successRate) => {
+            const rate = parseFloat(successRate);
+            if (rate >= 90) return 'success';
+            if (rate >= 70) return 'warning';
+            return 'danger';
+        };
+
         onMounted(() => {
             scanPorts();
             window.electronAPI.onSerialData(handleSerialData);
@@ -1375,7 +1505,11 @@ export default {
             switchDetectionMode,
             udpConfigDialogVisible,
             showUdpConfigDialog,
-            saveUdpConfig
+            saveUdpConfig,
+            pingConfig,
+            startPingTest,
+            getPingResultType,
+            currentPingTest
         };
     }
 };
@@ -1743,5 +1877,27 @@ export default {
 .device-table-container {
     flex: 1;
     overflow: auto;
+}
+
+/* Ping相关样式 */
+.ping-config {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ping-result {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ping-time {
+    font-size: 12px;
+    color: #909399;
+}
+
+.no-result {
+    color: #C0C4CC;
 }
 </style>
