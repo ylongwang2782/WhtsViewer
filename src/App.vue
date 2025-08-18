@@ -65,10 +65,14 @@
                             </template>
                         </el-input>
                     </el-col>
-                    <el-col :span="8">
-                        <el-button :type="isRunning ? 'danger' : 'success'" :loading="isWaitingResponse"
-                            @click="handleCtrlCommand" :disabled="!isConnected">
-                            {{ isWaitingResponse ? '等待响应...' : (isRunning ? '停止' : '开始') }}
+                    <el-col :span="4">
+                        <el-button type="success" @click="sendStartCommand" :disabled="!isConnected">
+                            开始
+                        </el-button>
+                    </el-col>
+                    <el-col :span="4">
+                        <el-button type="danger" @click="sendStopCommand" :disabled="!isConnected">
+                            停止
                         </el-button>
                     </el-col>
                 </el-row>
@@ -279,10 +283,10 @@
                                         <el-col :span="20">
                                             <div class="ping-config">
                                                 <span>Ping配置：</span>
-                                                <el-input-number v-model="pingConfig.count" :min="1" :max="100" 
+                                                <el-input-number v-model="pingConfig.count" :min="1" :max="1000" 
                                                     placeholder="次数" style="width: 200px" />
                                                 <span style="margin: 0 10px;">次，间隔</span>
-                                                <el-input-number v-model="pingConfig.interval" :min="100" :max="5000" :step="100"
+                                                <el-input-number v-model="pingConfig.interval" :min="5" :max="5000" :step="100"
                                                     placeholder="间隔" style="width: 200px" />
                                                 <span style="margin-left: 5px;">ms</span>
                                             </div>
@@ -756,38 +760,38 @@ export default {
 
         // 添加运行状态控制
         const isRunning = ref(false);
-        const isWaitingResponse = ref(false);
-        const responseTimeout = ref(null);
 
-        // 修改控制命令处理
-        const handleCtrlCommand = async () => {
+        // 发送开始命令
+        const sendStartCommand = async () => {
             if (!isConnected.value) {
                 ElMessage.warning('请先建立连接');
                 return;
             }
 
             try {
-                isWaitingResponse.value = true;
-                const runningStatus = !isRunning.value ? 1 : 0; // 切换状态
-                const ctrlCmd = whtsBackend.createCtrlMessage(runningStatus);
-
+                const ctrlCmd = whtsBackend.createCtrlMessage(1); // 开始状态
                 await window.electronAPI.sendUdpData(ctrlCmd);
-
-                // 设置响应超时
-                if (responseTimeout.value) {
-                    clearTimeout(responseTimeout.value);
-                }
-
-                responseTimeout.value = setTimeout(() => {
-                    if (isWaitingResponse.value) {
-                        isWaitingResponse.value = false;
-                        ElMessage.error('主机响应超时');
-                    }
-                }, 3000); // 3秒超时
-
+                ElMessage.success('开始命令已发送');
+                isRunning.value = true; // 直接更新状态，不等待响应
             } catch (error) {
-                isWaitingResponse.value = false;
-                ElMessage.error('发送失败：' + error.message);
+                ElMessage.error('发送开始命令失败：' + error.message);
+            }
+        };
+
+        // 发送停止命令
+        const sendStopCommand = async () => {
+            if (!isConnected.value) {
+                ElMessage.warning('请先建立连接');
+                return;
+            }
+
+            try {
+                const ctrlCmd = whtsBackend.createCtrlMessage(0); // 停止状态
+                await window.electronAPI.sendUdpData(ctrlCmd);
+                ElMessage.success('停止命令已发送');
+                isRunning.value = false; // 直接更新状态，不等待响应
+            } catch (error) {
+                ElMessage.error('发送停止命令失败：' + error.message);
             }
         };
 
@@ -838,23 +842,6 @@ export default {
                         }
                     } else {
                         logs.value.push(logEntry);
-                    }
-                }
-            } 
-            // 处理Master2Backend响应
-            else if (whtsBackend.isCtrlResponse(parsedData) && isWaitingResponse.value) {
-                isWaitingResponse.value = false;
-                if (responseTimeout.value) {
-                    clearTimeout(responseTimeout.value);
-                }
-
-                const parsedMsg = whtsBackend.getParsedData(parsedData);
-                if (parsedMsg) {
-                    if (parsedMsg.status === 0) {
-                        isRunning.value = parsedMsg.runningStatus === 1;
-                        ElMessage.success(`主机已${parsedMsg.runningText}`);
-                    } else {
-                        ElMessage.error('主机响应异常');
                     }
                 }
             } 
@@ -1484,8 +1471,8 @@ export default {
             offlineTimeout,
             deviceOnlineStatus,
             isRunning,
-            isWaitingResponse,
-            handleCtrlCommand,
+            sendStartCommand,
+            sendStopCommand,
             configDialogVisible,
             currentConfig,
             slaveConfigs,
