@@ -73,6 +73,8 @@ jobs:
           tag_name: ${{ steps.get_version.outputs.version }}
           name: "Release ${{ steps.get_version.outputs.version }}"
           generate_release_notes: true
+          draft: false
+          prerelease: false
           files: |
             dist_electron/*.exe
         env:
