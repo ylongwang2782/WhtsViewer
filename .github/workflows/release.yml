@@ -1,8 +1,9 @@
 name: Release
 
 on:
-  push:
-    branches: [ main ]
+    push:
+      tags:
+        - 'v*'
 
 permissions:
   contents: write
@@ -14,13 +15,25 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
-    if: "!contains(github.event.head_commit.message, 'chore(release)')"
     
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get latest git tag
+        id: get_version
+        shell: bash
+        run: |
+          if git describe --tags --abbrev=0 2>/dev/null; then
+            VERSION=$(git describe --tags --abbrev=0)
+          else
+            VERSION=$(git rev-parse --short HEAD)
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
@@ -39,20 +52,13 @@ jobs:
           git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/ylongwang2782/WhtsViewer.git
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Create Release
-        shell: bash
-        run: |
-          npm run release
-          git push --follow-tags origin main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get Version
-        id: package_version
+      - name: Sync version from git tag to package.json
         run: |
-            echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
-        shell: bash
+          VERSION=${{ steps.get_version.outputs.version }}
+          VERSION_NO_V=${VERSION#v}
+          echo "Updating package.json version to $VERSION_NO_V"
+          npm version --no-git-tag-version $VERSION_NO_V
       
       - name: Build Application
         run: |
@@ -61,12 +67,12 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: "Release ${{ steps.get_version.outputs.version }}"
           files: |
             dist_electron/*.exe
-          draft: false
-          prerelease: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: v${{ env.VERSION }}
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
