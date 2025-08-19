@@ -54,6 +54,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sync version from git tag to package.json
+        shell: bash
         run: |
           VERSION=${{ steps.get_version.outputs.version }}
           VERSION_NO_V=${VERSION#v}
