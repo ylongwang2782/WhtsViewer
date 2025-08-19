@@ -31,7 +31,8 @@
   },
   "build": {
     "appId": "com.whts.viewer",
-    "productName": "Whts Viewer",
+    "productName": "whts-viewer",
+    "artifactName": "${productName}-v${version}.${ext}",
     "directories": {
       "output": "dist_electron"
     },
@@ -42,15 +43,8 @@
       ],
       "icon": "build/icon.ico"
     },
-    "mac": {
-      "target": [
-        "dmg"
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ]
+    "nsis": {
+      "artifactName": "${productName}-Setup-v${version}.${ext}"
     }
   },
   "repository": {
