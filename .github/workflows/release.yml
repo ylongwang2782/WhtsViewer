@@ -54,12 +54,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Sync version from git tag to package.json
-        shell: bash
         run: |
-          VERSION=${{ steps.get_version.outputs.version }}
-          VERSION_NO_V=${VERSION#v}
-          echo "Updating package.json version to $VERSION_NO_V"
-          npm version --no-git-tag-version $VERSION_NO_V
+          $version = "${{ steps.get_version.outputs.version }}"
+          $versionNoV = $version.TrimStart("v")
+          Write-Output "Updating package.json version to $versionNoV"
+          npm version --no-git-tag-version $versionNoV
       
       - name: Build Application
         run: |
