@@ -273,6 +273,48 @@
                                 </div>
                             </div>
                         </el-tab-pane>
+                        <el-tab-pane label="从机复位">
+                            <div class="reset-management-container">
+                                <div class="reset-header mb-20">
+                                    <el-button type="primary" @click="showNewResetDialog">新建复位配置</el-button>
+                                </div>
+                                <div class="reset-table-container">
+                                    <el-table :data="resetConfigs" style="width: 100%" border>
+                                        <el-table-column prop="name" label="配置名称" />
+                                        <el-table-column label="从机数量" width="100">
+                                            <template #default="scope">
+                                                {{ scope.row.slaves.length }}
+                                            </template>
+                                        </el-table-column>
+                                        <el-table-column label="从机配置" min-width="400">
+                                            <template #default="scope">
+                                                <div v-for="(slave, index) in scope.row.slaves" :key="index"
+                                                    class="reset-config-info">
+                                                    从机{{ index + 1 }}: ID={{ slave.id }},
+                                                    锁状态={{ slave.lock === '1' ? '上锁' : '解锁' }},
+                                                    复位卡钉=0x{{ slave.clipStatus }}
+                                                </div>
+                                            </template>
+                                        </el-table-column>
+                                        <el-table-column label="操作" width="200" fixed="right">
+                                            <template #default="scope">
+                                                <el-button size="small" :loading="isWaitingResetResponse"
+                                                    @click="sendSlaveReset(scope.row)">
+                                                    {{ isWaitingResetResponse ? '等待响应...' : '发送' }}
+                                                </el-button>
+                                                <el-button size="small" type="primary" @click="editResetConfig(scope.row)">
+                                                    编辑
+                                                </el-button>
+                                                <el-button size="small" type="danger"
+                                                    @click="deleteResetConfig(scope.$index)">
+                                                    删除
+                                                </el-button>
+                                            </template>
+                                        </el-table-column>
+                                    </el-table>
+                                </div>
+                            </div>
+                        </el-tab-pane>
                         <el-tab-pane label="从机查询">
                             <div class="device-query-container">
                                 <div class="query-header mb-20">
@@ -440,6 +482,77 @@
                 <template #footer>
                     <el-button @click="udpConfigDialogVisible = false">取消</el-button>
                     <el-button type="primary" @click="saveUdpConfig">保存并连接</el-button>
+                </template>
+            </el-dialog>
+
+            <!-- 从机复位配置对话框 -->
+            <el-dialog v-model="resetDialogVisible" title="从机复位配置管理" width="80%">
+                <el-form :model="currentResetConfig" label-width="120px">
+                    <el-form-item label="配置名称">
+                        <el-input v-model="currentResetConfig.name" placeholder="请输入配置名称" />
+                    </el-form-item>
+
+                    <div v-for="(slave, index) in currentResetConfig.slaves" :key="index" class="slave-config-item">
+                        <el-divider>从机 {{ index + 1 }}</el-divider>
+                        <el-row :gutter="20">
+                            <el-col :span="8">
+                                <el-form-item :label="'从机ID'" :rules="[
+                                    { required: true, message: '请输入从机ID' },
+                                    {
+                                        validator: (rule, value, callback) => {
+                                            if (!validateHex(value, 8)) {
+                                                callback(new Error('请输入8位十六进制数（例如：46733B4E）'));
+                                            } else {
+                                                callback();
+                                            }
+                                        }
+                                    }
+                                ]">
+                                    <el-input v-model="slave.id" placeholder="8位十六进制数（例如：46733B4E）"
+                                        @input="value => slave.id = value.toUpperCase()" maxlength="8" />
+                                </el-form-item>
+                            </el-col>
+                            <el-col :span="6">
+                                <el-form-item label="锁状态" :rules="[
+                                    { required: true, message: '请选择锁状态' }
+                                ]">
+                                    <el-select v-model="slave.lock" placeholder="选择锁状态">
+                                        <el-option label="解锁" value="0" />
+                                        <el-option label="上锁" value="1" />
+                                    </el-select>
+                                </el-form-item>
+                            </el-col>
+                            <el-col :span="6">
+                                <el-form-item label="复位卡钉" :rules="[
+                                    { required: true, message: '请输入复位卡钉孔位' },
+                                    {
+                                        validator: (rule, value, callback) => {
+                                            if (!validateHex(value, 4)) {
+                                                callback(new Error('请输入4位十六进制数'));
+                                            } else {
+                                                callback();
+                                            }
+                                        }
+                                    }
+                                ]">
+                                    <el-input v-model="slave.clipStatus" placeholder="4位十六进制数（例如：FFFF）"
+                                        @input="value => slave.clipStatus = value.toUpperCase()" maxlength="4" />
+                                </el-form-item>
+                            </el-col>
+                            <el-col :span="4">
+                                <el-button type="danger" @click="removeResetSlave(index)"
+                                    :disabled="currentResetConfig.slaves.length === 1">
+                                    删除从机
+                                </el-button>
+                            </el-col>
+                        </el-row>
+                    </div>
+
+                    <el-button type="primary" @click="addResetSlave">添加从机</el-button>
+                </el-form>
+                <template #footer>
+                    <el-button @click="resetDialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="saveResetConfig">保存配置</el-button>
                 </template>
             </el-dialog>
 
@@ -860,6 +973,21 @@ export default {
                     }
                 }
             } 
+            else if (whtsBackend.isSlaveResetResponse(parsedData) && isWaitingResetResponse.value) {
+                isWaitingResetResponse.value = false;
+                if (resetResponseTimeout.value) {
+                    clearTimeout(resetResponseTimeout.value);
+                }
+
+                const parsedMsg = whtsBackend.getParsedData(parsedData);
+                if (parsedMsg) {
+                    if (parsedMsg.status === 0) {
+                        ElMessage.success('复位指令已成功执行');
+                    } else {
+                        ElMessage.error('复位指令执行失败');
+                    }
+                }
+            } 
             else if (whtsBackend.isModeConfigResponse(parsedData) && isWaitingModeResponse.value) {
                 isWaitingModeResponse.value = false;
                 if (modeResponseTimeout.value) {
@@ -1099,11 +1227,35 @@ export default {
 
         const currentConfig = ref(createEmptyConfig());
 
+        // 添加SLAVE_RST_MSG复位配置管理
+        const resetConfigs = ref([]);  // 保存所有复位配置
+        const resetDialogVisible = ref(false);
+        const createEmptyResetConfig = () => {
+            return {
+                name: '',
+                slaves: [
+                    {
+                        id: '00000000',
+                        lock: '0',  // 0:解锁, 1:上锁
+                        clipStatus: '0000'  // 需要复位的卡钉孔位
+                    }
+                ]
+            };
+        };
+
+        const currentResetConfig = ref(createEmptyResetConfig());
+
         // 加载保存的配置
         const loadSavedConfigs = () => {
             const savedConfigs = localStorage.getItem('slaveConfigs');
             if (savedConfigs) {
                 slaveConfigs.value = JSON.parse(savedConfigs);
+            }
+            
+            // 加载复位配置
+            const savedResetConfigs = localStorage.getItem('resetConfigs');
+            if (savedResetConfigs) {
+                resetConfigs.value = JSON.parse(savedResetConfigs);
             }
         };
 
@@ -1239,6 +1391,100 @@ export default {
             configDialogVisible.value = true;
         };
 
+        // 复位配置管理函数
+        const showNewResetDialog = () => {
+            currentResetConfig.value = createEmptyResetConfig();
+            resetDialogVisible.value = true;
+        };
+
+        const addResetSlave = () => {
+            currentResetConfig.value.slaves.push({
+                id: '00000000',
+                lock: '0',
+                clipStatus: '0000'
+            });
+        };
+
+        const removeResetSlave = (index) => {
+            currentResetConfig.value.slaves.splice(index, 1);
+        };
+
+        const saveResetConfig = () => {
+            if (!currentResetConfig.value.name) {
+                ElMessage.warning('请输入配置名称');
+                return;
+            }
+
+            // 验证所有从机ID格式
+            for (const slave of currentResetConfig.value.slaves) {
+                if (!validateHex(slave.id, 8)) {
+                    ElMessage.warning('从机ID必须是8位十六进制数（例如：46733B4E）');
+                    return;
+                }
+                if (!validateHex(slave.clipStatus, 4)) {
+                    ElMessage.warning('复位卡钉必须是4位十六进制数（例如：FFFF）');
+                    return;
+                }
+            }
+
+            // 创建配置的深拷贝
+            const configToSave = JSON.parse(JSON.stringify(currentResetConfig.value));
+
+            const existingIndex = resetConfigs.value.findIndex(config => config.name === configToSave.name);
+            if (existingIndex !== -1) {
+                resetConfigs.value[existingIndex] = configToSave;
+            } else {
+                resetConfigs.value.push(configToSave);
+            }
+
+            localStorage.setItem('resetConfigs', JSON.stringify(resetConfigs.value));
+            resetDialogVisible.value = false;
+            ElMessage.success('复位配置已保存');
+        };
+
+        const editResetConfig = (config) => {
+            // 创建配置的深拷贝
+            currentResetConfig.value = JSON.parse(JSON.stringify(config));
+            resetDialogVisible.value = true;
+        };
+
+        const deleteResetConfig = (index) => {
+            resetConfigs.value.splice(index, 1);
+            localStorage.setItem('resetConfigs', JSON.stringify(resetConfigs.value));
+        };
+
+        // 发送复位指令
+        const sendSlaveReset = async (config) => {
+            if (!isConnected.value) {
+                ElMessage.warning('请先建立连接');
+                return;
+            }
+
+            try {
+                const message = whtsBackend.createSlaveResetMessage(config.slaves);
+                console.log('发送从机复位指令:', whtsBackend.bytesToHexString(message));
+
+                // 设置等待状态
+                isWaitingResetResponse.value = true;
+
+                // 设置超时
+                if (resetResponseTimeout.value) {
+                    clearTimeout(resetResponseTimeout.value);
+                }
+                resetResponseTimeout.value = setTimeout(() => {
+                    if (isWaitingResetResponse.value) {
+                        isWaitingResetResponse.value = false;
+                        ElMessage.error('复位响应超时');
+                    }
+                }, 10000); // 10秒超时
+
+                await window.electronAPI.sendUdpData(message);
+            } catch (error) {
+                isWaitingResetResponse.value = false;
+                ElMessage.error('发送复位指令失败：' + error.message);
+            }
+        };
+
         // 显示UDP配置弹出框
         const showUdpConfigDialog = () => {
             udpConfigDialogVisible.value = true;
@@ -1345,6 +1591,10 @@ export default {
         const detectionMode = ref('0'); // 默认导通检测模式
         const isWaitingModeResponse = ref(false);
         const modeResponseTimeout = ref(null);
+
+        // 添加复位响应相关的状态
+        const isWaitingResetResponse = ref(false);
+        const resetResponseTimeout = ref(null);
 
         // Ping测试函数
         const startPingTest = async (device) => {
@@ -1496,7 +1746,18 @@ export default {
             pingConfig,
             startPingTest,
             getPingResultType,
-            currentPingTest
+            currentPingTest,
+            resetConfigs,
+            resetDialogVisible,
+            currentResetConfig,
+            showNewResetDialog,
+            addResetSlave,
+            removeResetSlave,
+            saveResetConfig,
+            editResetConfig,
+            deleteResetConfig,
+            sendSlaveReset,
+            isWaitingResetResponse
         };
     }
 };
@@ -1886,5 +2147,30 @@ export default {
 
 .no-result {
     color: #C0C4CC;
+}
+
+/* 复位配置相关样式 */
+.reset-management-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.reset-header {
+    flex-shrink: 0;
+}
+
+.reset-table-container {
+    flex: 1;
+    overflow: auto;
+}
+
+.reset-config-info {
+    margin: 5px 0;
+    font-family: monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 400px;
 }
 </style>

@@ -259,6 +259,35 @@ export class Backend2MasterMessageBuilder {
         return Backend2MasterMessageBuilder._buildFrame(data);
     }
     
+    // 构建从机复位消息
+    static buildSlaveResetMessage(slaveResetConfigs) {
+        const data = [];
+        
+        // Message ID
+        data.push(PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.SLAVE_RST_MSG);
+        
+        // Slave数量
+        data.push(slaveResetConfigs.length);
+        
+        slaveResetConfigs.forEach(slave => {
+            // Slave ID (4 bytes, little endian)
+            const idBytes = [];
+            for (let i = 0; i < 8; i += 2) {
+                idBytes.push(parseInt(slave.id.slice(i, i + 2), 16));
+            }
+            data.push(...idBytes.reverse()); // 小端序
+            
+            // Lock状态 (1 byte) - 1:上锁, 0:解锁
+            data.push(parseInt(slave.lock));
+            
+            // Clip Status (2 bytes, little endian) - 需要复位的卡钉孔位
+            const clipStatus = parseInt(slave.clipStatus, 16);
+            data.push(clipStatus & 0xFF, (clipStatus >> 8) & 0xFF);
+        });
+        
+        return Backend2MasterMessageBuilder._buildFrame(data);
+    }
+    
     // 构建帧的通用方法
     static _buildFrame(payloadData) {
         const frame = new WhtsFrame();

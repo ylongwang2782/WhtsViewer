@@ -77,6 +77,11 @@ export class WhtsBackendProtocol {
         return Backend2MasterMessageBuilder.buildPingCtrlMessage(pingMode, pingCount, interval, destinationId);
     }
 
+    // 创建从机复位消息
+    createSlaveResetMessage(slaveResetConfigs) {
+        return Backend2MasterMessageBuilder.buildSlaveResetMessage(slaveResetConfigs);
+    }
+
     // 检查是否为Master2Backend控制响应
     isCtrlResponse(parsedData) {
         return parsedData.isValid && 
@@ -96,6 +101,13 @@ export class WhtsBackendProtocol {
         return parsedData.isValid && 
                parsedData.rawFrame?.packetId === PROTOCOL_CONSTANTS.PACKET_TYPES.MASTER_TO_BACKEND &&
                parsedData.parsedMessage?.messageName === 'MODE_CFG_RSP_MSG';
+    }
+
+    // 检查是否为Master2Backend复位响应
+    isSlaveResetResponse(parsedData) {
+        return parsedData.isValid && 
+               parsedData.rawFrame?.packetId === PROTOCOL_CONSTANTS.PACKET_TYPES.MASTER_TO_BACKEND &&
+               parsedData.parsedMessage?.messageName === 'SLAVE_RST_RSP_MSG';
     }
 
     // 检查是否为Master2Backend设备列表响应
