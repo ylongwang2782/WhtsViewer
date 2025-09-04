@@ -26,10 +26,6 @@
                             <el-option v-for="rate in baudRates" :key="rate" :label="rate" :value="rate" />
                         </el-select>
                     </el-col>
-                    <!-- UDP配置按钮 -->
-                    <el-col :span="4" v-if="communicationType === 'udp'">
-                        <el-button type="primary" @click="showUdpConfigDialog">UDP配置</el-button>
-                    </el-col>
                     <!-- 连接按钮 -->
                     <el-col :span="4">
                         <el-button :type="isConnected ? 'danger' : 'success'" @click="toggleConnection">
@@ -76,19 +72,6 @@
                         </el-button>
                     </el-col>
                 </el-row>
-                <el-row :gutter="20">
-                    <el-col :span="24">
-                        <div class="filter-bar">
-                            <el-input v-model="searchText" placeholder="搜索日志" prefix-icon="el-icon-search" clearable
-                                @clear="filterLogs" @input="filterLogs" style="width: 200px" />
-                            <el-input-number v-model="pageSize" :min="1" :max="1000" placeholder="每页显示条数"
-                                style="width: 120px" @change="handlePageSizeChange" />
-                            <el-button size="small" @click="clearOutput">清空</el-button>
-                            <el-button size="small" @click="showAboutDialog">关于</el-button>
-                            <el-button size="small" @click="showTableConfig">表格设置</el-button>
-                        </div>
-                    </el-col>
-                </el-row>
             </el-header>
 
             <el-main>
@@ -96,6 +79,15 @@
                     <el-tabs type="border-card">
                         <el-tab-pane label="所有数据">
                             <div class="output-window">
+                                <div class="filter-bar mb-20">
+                                    <el-input v-model="searchText" placeholder="搜索日志" prefix-icon="el-icon-search" clearable
+                                        @clear="filterLogs" @input="filterLogs" style="width: 200px" />
+                                    <el-input-number v-model="pageSize" :min="1" :max="1000" placeholder="每页显示条数"
+                                        style="width: 120px" @change="handlePageSizeChange" />
+                                    <el-button size="small" @click="clearOutput">清空</el-button>
+                                    <el-button size="small" @click="showAboutDialog">关于</el-button>
+                                    <el-button size="small" @click="showTableConfig">表格设置</el-button>
+                                </div>
                                 <div class="log-table-container" ref="logContainer">
                                     <el-table :data="paginatedLogs" style="width: 100%" size="small"
                                         height="calc(100% - 50px)" border :style="{
@@ -131,6 +123,9 @@
                                         <el-form-item label="设备离线超时(ms)">
                                             <el-input-number v-model="offlineTimeout" :min="1000" :max="60000"
                                                 :step="1000" @change="checkDeviceStatus" />
+                                        </el-form-item>
+                                        <el-form-item>
+                                            <el-button size="small" type="danger" @click="clearConductionData">清空数据</el-button>
                                         </el-form-item>
                                     </el-form>
                                 </div>
@@ -826,6 +821,11 @@ export default {
         const clearOutput = () => {
             logs.value = [];
             currentPage.value = 1;  // 清空日志时重置页码
+        };
+
+        const clearConductionData = () => {
+            slave2BackendLogs.value.clear();
+            ElMessage.success('导通数据已清空');
         };
 
         const processBuffer = () => {
@@ -1766,6 +1766,7 @@ export default {
             scanPorts,
             toggleConnection,
             clearOutput,
+            clearConductionData,
             logContainer,
             filteredLogs,
             searchText,
