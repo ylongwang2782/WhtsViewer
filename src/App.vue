@@ -244,6 +244,25 @@
                                             </div>
                                         </el-col>
                                     </el-row>
+                                    <el-row :gutter="20" class="mb-20">
+                                        <el-col :span="8">
+                                            <div class="uwb-channel-config">
+                                                <span>UWB信道配置：</span>
+                                                <el-select v-model="uwbChannelConfig.channel" placeholder="选择信道" style="width: 120px">
+                                                    <el-option label="信道 5" :value="5" />
+                                                    <el-option label="信道 6" :value="6" />
+                                                    <el-option label="信道 7" :value="7" />
+                                                    <el-option label="信道 8" :value="8" />
+                                                    <el-option label="信道 9" :value="9" />
+                                                    <el-option label="信道 10" :value="10" />
+                                                </el-select>
+                                                <el-button size="small" type="primary" :loading="isWaitingUwbChannelResponse"
+                                                    @click="sendUwbChannelConfig" :disabled="!isConnected">
+                                                    {{ isWaitingUwbChannelResponse ? '发送中...' : '发送' }}
+                                                </el-button>
+                                            </div>
+                                        </el-col>
+                                    </el-row>
                                 </div>
                                 <div class="config-table-container">
                                     <el-table :data="slaveConfigs" style="width: 100%" border>
@@ -1034,6 +1053,17 @@ export default {
                     }
                 }
             }
+            else if (whtsBackend.isSetUwbChannelResponse(parsedData) && isWaitingUwbChannelResponse.value) {
+                isWaitingUwbChannelResponse.value = false;
+                const parsedMsg = whtsBackend.getParsedData(parsedData);
+                if (parsedMsg) {
+                    if (parsedMsg.status === 0) {
+                        ElMessage.success(`UWB信道配置成功：${parsedMsg.channelText}`);
+                    } else {
+                        ElMessage.error('UWB信道配置失败');
+                    }
+                }
+            }
             else if (whtsBackend.isDeviceListResponse(parsedData)) {
                 const parsedMsg = whtsBackend.getParsedData(parsedData);
                 if (parsedMsg) {
@@ -1407,6 +1437,13 @@ export default {
         
         const isWaitingIntervalResponse = ref(false);
 
+        // 添加UWB信道配置相关状态
+        const uwbChannelConfig = ref({
+            channel: 5  // 默认信道5
+        });
+        
+        const isWaitingUwbChannelResponse = ref(false);
+
         // 查询设备列表
         const queryDeviceList = async () => {
             if (!isConnected.value) {
@@ -1445,6 +1482,32 @@ export default {
                 }, 5000);
             } catch (error) {
                 isWaitingIntervalResponse.value = false;
+                ElMessage.error('发送失败：' + error.message);
+            }
+        };
+
+        // 发送UWB信道配置
+        const sendUwbChannelConfig = async () => {
+            if (!isConnected.value) {
+                ElMessage.warning('请先建立连接');
+                return;
+            }
+
+            try {
+                isWaitingUwbChannelResponse.value = true;
+                const message = whtsBackend.createSetUwbChannelMessage(uwbChannelConfig.value.channel);
+                console.log('发送UWB信道配置:', whtsBackend.bytesToHexString(message));
+                await window.electronAPI.sendUdpData(message);
+
+                // 设置超时
+                setTimeout(() => {
+                    if (isWaitingUwbChannelResponse.value) {
+                        isWaitingUwbChannelResponse.value = false;
+                        ElMessage.warning('UWB信道配置响应超时');
+                    }
+                }, 5000);
+            } catch (error) {
+                isWaitingUwbChannelResponse.value = false;
                 ElMessage.error('发送失败：' + error.message);
             }
         };
@@ -1821,6 +1884,9 @@ export default {
             intervalConfig,
             sendIntervalConfig,
             isWaitingIntervalResponse,
+            uwbChannelConfig,
+            sendUwbChannelConfig,
+            isWaitingUwbChannelResponse,
             currentConfigName,
             detectionMode,
             isWaitingModeResponse,
@@ -2221,6 +2287,13 @@ export default {
 
 /* 间隔配置样式 */
 .interval-config {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* UWB信道配置样式 */
+.uwb-channel-config {
     display: flex;
     align-items: center;
     gap: 10px;

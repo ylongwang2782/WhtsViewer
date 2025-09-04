@@ -26,7 +26,8 @@ export const PROTOCOL_CONSTANTS = {
         INTERVAL_CFG_MSG: 0x06,
         PING_CTRL_MSG: 0x10,
         DEVICE_LIST_REQ_MSG: 0x11,
-        CLEAR_DEVICE_LIST_MSG: 0x12
+        CLEAR_DEVICE_LIST_MSG: 0x12,
+        SET_UWB_CHAN_MSG: 0x13
     },
     
     // Master2Backend消息类型
@@ -37,7 +38,8 @@ export const PROTOCOL_CONSTANTS = {
         CTRL_RSP_MSG: 0x03,
         PING_RES_MSG: 0x04,
         DEVICE_LIST_RSP_MSG: 0x05,
-        INTERVAL_CFG_RSP_MSG: 0x06
+        INTERVAL_CFG_RSP_MSG: 0x06,
+        SET_UWB_CHAN_RSP_MSG: 0x13
     },
     
     // Slave2Backend消息类型
@@ -77,7 +79,8 @@ export function getBackend2MasterMessageName(messageId) {
         [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.INTERVAL_CFG_MSG]: 'INTERVAL_CFG_MSG',
         [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.PING_CTRL_MSG]: 'PING_CTRL_MSG',
         [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.DEVICE_LIST_REQ_MSG]: 'DEVICE_LIST_REQ_MSG',
-        [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.CLEAR_DEVICE_LIST_MSG]: 'CLEAR_DEVICE_LIST_MSG'
+        [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.CLEAR_DEVICE_LIST_MSG]: 'CLEAR_DEVICE_LIST_MSG',
+        [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.SET_UWB_CHAN_MSG]: 'SET_UWB_CHAN_MSG'
     };
     return messageMap[messageId] || `Unknown(0x${messageId.toString(16).toUpperCase()})`;
 }
@@ -91,7 +94,8 @@ export function getMaster2BackendMessageName(messageId) {
         [PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.CTRL_RSP_MSG]: 'CTRL_RSP_MSG',
         [PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.PING_RES_MSG]: 'PING_RES_MSG',
         [PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.DEVICE_LIST_RSP_MSG]: 'DEVICE_LIST_RSP_MSG',
-        [PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.INTERVAL_CFG_RSP_MSG]: 'INTERVAL_CFG_RSP_MSG'
+        [PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.INTERVAL_CFG_RSP_MSG]: 'INTERVAL_CFG_RSP_MSG',
+        [PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.SET_UWB_CHAN_RSP_MSG]: 'SET_UWB_CHAN_RSP_MSG'
     };
     return messageMap[messageId] || `Unknown(0x${messageId.toString(16).toUpperCase()})`;
 }
@@ -270,6 +274,15 @@ export class Backend2MasterMessageBuilder {
         return Backend2MasterMessageBuilder._buildFrame(data);
     }
     
+    // 构建设置UWB信道消息
+    static buildSetUwbChannelMessage(channel) {
+        const data = [
+            PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.SET_UWB_CHAN_MSG,
+            channel // 信道号 (5-10)
+        ];
+        return Backend2MasterMessageBuilder._buildFrame(data);
+    }
+    
     // 构建Ping控制消息
     static buildPingCtrlMessage(pingMode, pingCount, interval, destinationId) {
         const data = [
@@ -365,6 +378,9 @@ export class Master2BackendMessageParser {
                 break;
             case PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.INTERVAL_CFG_RSP_MSG:
                 result.parsedData = Master2BackendMessageParser._parseIntervalConfigResponse(messagePayload);
+                break;
+            case PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.SET_UWB_CHAN_RSP_MSG:
+                result.parsedData = Master2BackendMessageParser._parseSetUwbChannelResponse(messagePayload);
                 break;
         }
         
@@ -493,6 +509,21 @@ export class Master2BackendMessageParser {
             status,
             intervalMs,
             statusText: status === 0 ? '正常' : '异常'
+        };
+    }
+    
+    // 解析设置UWB信道响应
+    static _parseSetUwbChannelResponse(payload) {
+        if (payload.length < 2) return null;
+        
+        const status = payload[0];
+        const channel = payload[1];
+        
+        return {
+            status,
+            channel,
+            statusText: status === 0 ? '正常' : '异常',
+            channelText: `信道 ${channel}`
         };
     }
 }

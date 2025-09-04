@@ -92,6 +92,11 @@ export class WhtsBackendProtocol {
         return Backend2MasterMessageBuilder.buildClearDeviceListMessage();
     }
 
+    // 创建设置UWB信道消息
+    createSetUwbChannelMessage(channel) {
+        return Backend2MasterMessageBuilder.buildSetUwbChannelMessage(channel);
+    }
+
     // 检查是否为Master2Backend控制响应
     isCtrlResponse(parsedData) {
         return parsedData.isValid && 
@@ -139,6 +144,13 @@ export class WhtsBackendProtocol {
         return parsedData.isValid && 
                parsedData.rawFrame?.packetId === PROTOCOL_CONSTANTS.PACKET_TYPES.MASTER_TO_BACKEND &&
                parsedData.parsedMessage?.messageName === 'INTERVAL_CFG_RSP_MSG';
+    }
+
+    // 检查是否为Master2Backend设置UWB信道响应
+    isSetUwbChannelResponse(parsedData) {
+        return parsedData.isValid && 
+               parsedData.rawFrame?.packetId === PROTOCOL_CONSTANTS.PACKET_TYPES.MASTER_TO_BACKEND &&
+               parsedData.parsedMessage?.messageName === 'SET_UWB_CHAN_RSP_MSG';
     }
 
     // 检查是否为Slave2Backend消息
