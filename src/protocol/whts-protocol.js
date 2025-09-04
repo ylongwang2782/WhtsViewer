@@ -23,8 +23,10 @@ export const PROTOCOL_CONSTANTS = {
         MODE_CFG_MSG: 0x01,
         SLAVE_RST_MSG: 0x02,
         CTRL_MSG: 0x03,
+        INTERVAL_CFG_MSG: 0x06,
         PING_CTRL_MSG: 0x10,
-        DEVICE_LIST_REQ_MSG: 0x11
+        DEVICE_LIST_REQ_MSG: 0x11,
+        CLEAR_DEVICE_LIST_MSG: 0x12
     },
     
     // Master2Backend消息类型
@@ -34,7 +36,8 @@ export const PROTOCOL_CONSTANTS = {
         SLAVE_RST_RSP_MSG: 0x02,
         CTRL_RSP_MSG: 0x03,
         PING_RES_MSG: 0x04,
-        DEVICE_LIST_RSP_MSG: 0x05
+        DEVICE_LIST_RSP_MSG: 0x05,
+        INTERVAL_CFG_RSP_MSG: 0x06
     },
     
     // Slave2Backend消息类型
@@ -71,8 +74,10 @@ export function getBackend2MasterMessageName(messageId) {
         [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.MODE_CFG_MSG]: 'MODE_CFG_MSG',
         [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.SLAVE_RST_MSG]: 'SLAVE_RST_MSG',
         [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.CTRL_MSG]: 'CTRL_MSG',
+        [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.INTERVAL_CFG_MSG]: 'INTERVAL_CFG_MSG',
         [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.PING_CTRL_MSG]: 'PING_CTRL_MSG',
-        [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.DEVICE_LIST_REQ_MSG]: 'DEVICE_LIST_REQ_MSG'
+        [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.DEVICE_LIST_REQ_MSG]: 'DEVICE_LIST_REQ_MSG',
+        [PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.CLEAR_DEVICE_LIST_MSG]: 'CLEAR_DEVICE_LIST_MSG'
     };
     return messageMap[messageId] || `Unknown(0x${messageId.toString(16).toUpperCase()})`;
 }
@@ -85,7 +90,8 @@ export function getMaster2BackendMessageName(messageId) {
         [PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.SLAVE_RST_RSP_MSG]: 'SLAVE_RST_RSP_MSG',
         [PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.CTRL_RSP_MSG]: 'CTRL_RSP_MSG',
         [PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.PING_RES_MSG]: 'PING_RES_MSG',
-        [PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.DEVICE_LIST_RSP_MSG]: 'DEVICE_LIST_RSP_MSG'
+        [PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.DEVICE_LIST_RSP_MSG]: 'DEVICE_LIST_RSP_MSG',
+        [PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.INTERVAL_CFG_RSP_MSG]: 'INTERVAL_CFG_RSP_MSG'
     };
     return messageMap[messageId] || `Unknown(0x${messageId.toString(16).toUpperCase()})`;
 }
@@ -246,6 +252,24 @@ export class Backend2MasterMessageBuilder {
         return Backend2MasterMessageBuilder._buildFrame(data);
     }
     
+    // 构建间隔配置消息
+    static buildIntervalConfigMessage(intervalMs) {
+        const data = [
+            PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.INTERVAL_CFG_MSG,
+            intervalMs // 间隔时间(ms)
+        ];
+        return Backend2MasterMessageBuilder._buildFrame(data);
+    }
+    
+    // 构建清除设备列表消息
+    static buildClearDeviceListMessage() {
+        const data = [
+            PROTOCOL_CONSTANTS.BACKEND_TO_MASTER_MESSAGES.CLEAR_DEVICE_LIST_MSG,
+            0x00 // Reserve
+        ];
+        return Backend2MasterMessageBuilder._buildFrame(data);
+    }
+    
     // 构建Ping控制消息
     static buildPingCtrlMessage(pingMode, pingCount, interval, destinationId) {
         const data = [
@@ -338,6 +362,9 @@ export class Master2BackendMessageParser {
                 break;
             case PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.PING_RES_MSG:
                 result.parsedData = Master2BackendMessageParser._parsePingResponse(messagePayload);
+                break;
+            case PROTOCOL_CONSTANTS.MASTER_TO_BACKEND_MESSAGES.INTERVAL_CFG_RSP_MSG:
+                result.parsedData = Master2BackendMessageParser._parseIntervalConfigResponse(messagePayload);
                 break;
         }
         
@@ -452,6 +479,20 @@ export class Master2BackendMessageParser {
             destinationId,
             pingModeText: pingMode === 0 ? '单次Ping' : '连续Ping',
             successRate: totalCount > 0 ? ((successCount / totalCount) * 100).toFixed(1) + '%' : '0%'
+        };
+    }
+    
+    // 解析间隔配置响应
+    static _parseIntervalConfigResponse(payload) {
+        if (payload.length < 2) return null;
+        
+        const status = payload[0];
+        const intervalMs = payload[1];
+        
+        return {
+            status,
+            intervalMs,
+            statusText: status === 0 ? '正常' : '异常'
         };
     }
 }

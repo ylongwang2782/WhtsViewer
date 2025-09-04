@@ -82,6 +82,16 @@ export class WhtsBackendProtocol {
         return Backend2MasterMessageBuilder.buildSlaveResetMessage(slaveResetConfigs);
     }
 
+    // 创建间隔配置消息
+    createIntervalConfigMessage(intervalMs) {
+        return Backend2MasterMessageBuilder.buildIntervalConfigMessage(intervalMs);
+    }
+
+    // 创建清除设备列表消息
+    createClearDeviceListMessage() {
+        return Backend2MasterMessageBuilder.buildClearDeviceListMessage();
+    }
+
     // 检查是否为Master2Backend控制响应
     isCtrlResponse(parsedData) {
         return parsedData.isValid && 
@@ -122,6 +132,13 @@ export class WhtsBackendProtocol {
         return parsedData.isValid && 
                parsedData.rawFrame?.packetId === PROTOCOL_CONSTANTS.PACKET_TYPES.MASTER_TO_BACKEND &&
                parsedData.parsedMessage?.messageName === 'PING_RES_MSG';
+    }
+
+    // 检查是否为Master2Backend间隔配置响应
+    isIntervalConfigResponse(parsedData) {
+        return parsedData.isValid && 
+               parsedData.rawFrame?.packetId === PROTOCOL_CONSTANTS.PACKET_TYPES.MASTER_TO_BACKEND &&
+               parsedData.parsedMessage?.messageName === 'INTERVAL_CFG_RSP_MSG';
     }
 
     // 检查是否为Slave2Backend消息

@@ -232,7 +232,23 @@
                         <el-tab-pane label="从机配置">
                             <div class="config-management-container">
                                 <div class="config-header mb-20">
-                                    <el-button type="primary" @click="showNewConfigDialog">新建配置</el-button>
+                                    <el-row :gutter="20">
+                                        <el-col :span="4">
+                                            <el-button type="primary" @click="showNewConfigDialog">新建配置</el-button>
+                                        </el-col>
+                                        <el-col :span="8">
+                                            <div class="interval-config">
+                                                <span>间隔配置：</span>
+                                                <el-input-number v-model="intervalConfig.intervalMs" :min="1" :max="255" 
+                                                    placeholder="间隔时间" style="width: 120px" />
+                                                <span style="margin: 0 5px;">ms</span>
+                                                <el-button size="small" type="primary" :loading="isWaitingIntervalResponse"
+                                                    @click="sendIntervalConfig" :disabled="!isConnected">
+                                                    {{ isWaitingIntervalResponse ? '发送中...' : '发送' }}
+                                                </el-button>
+                                            </div>
+                                        </el-col>
+                                    </el-row>
                                 </div>
                                 <div class="config-table-container">
                                     <el-table :data="slaveConfigs" style="width: 100%" border>
@@ -322,7 +338,10 @@
                                         <el-col :span="4">
                                             <el-button type="primary" @click="queryDeviceList">查询设备列表</el-button>
                                         </el-col>
-                                        <el-col :span="20">
+                                        <el-col :span="4">
+                                            <el-button type="danger" @click="clearDeviceList" :disabled="!isConnected">清除设备列表</el-button>
+                                        </el-col>
+                                        <el-col :span="16">
                                             <div class="ping-config">
                                                 <span>Ping配置：</span>
                                                 <el-input-number v-model="pingConfig.count" :min="1" :max="1000" 
@@ -1004,6 +1023,17 @@ export default {
                     }
                 }
             } 
+            else if (whtsBackend.isIntervalConfigResponse(parsedData) && isWaitingIntervalResponse.value) {
+                isWaitingIntervalResponse.value = false;
+                const parsedMsg = whtsBackend.getParsedData(parsedData);
+                if (parsedMsg) {
+                    if (parsedMsg.status === 0) {
+                        ElMessage.success(`间隔配置成功：${parsedMsg.intervalMs}ms`);
+                    } else {
+                        ElMessage.error('间隔配置失败');
+                    }
+                }
+            }
             else if (whtsBackend.isDeviceListResponse(parsedData)) {
                 const parsedMsg = whtsBackend.getParsedData(parsedData);
                 if (parsedMsg) {
@@ -1370,6 +1400,13 @@ export default {
         const pingTestResults = ref(new Map()); // 存储ping测试结果
         const currentPingTest = ref(null); // 当前正在进行的ping测试
 
+        // 添加间隔配置相关状态
+        const intervalConfig = ref({
+            intervalMs: 100  // 默认100ms间隔
+        });
+        
+        const isWaitingIntervalResponse = ref(false);
+
         // 查询设备列表
         const queryDeviceList = async () => {
             if (!isConnected.value) {
@@ -1381,6 +1418,49 @@ export default {
                 const message = whtsBackend.createDeviceListRequestMessage();
                 console.log('发送设备列表请求:', whtsBackend.bytesToHexString(message));
                 await window.electronAPI.sendUdpData(message);
+            } catch (error) {
+                ElMessage.error('发送失败：' + error.message);
+            }
+        };
+
+        // 发送间隔配置
+        const sendIntervalConfig = async () => {
+            if (!isConnected.value) {
+                ElMessage.warning('请先建立连接');
+                return;
+            }
+
+            try {
+                isWaitingIntervalResponse.value = true;
+                const message = whtsBackend.createIntervalConfigMessage(intervalConfig.value.intervalMs);
+                console.log('发送间隔配置:', whtsBackend.bytesToHexString(message));
+                await window.electronAPI.sendUdpData(message);
+
+                // 设置超时
+                setTimeout(() => {
+                    if (isWaitingIntervalResponse.value) {
+                        isWaitingIntervalResponse.value = false;
+                        ElMessage.warning('间隔配置响应超时');
+                    }
+                }, 5000);
+            } catch (error) {
+                isWaitingIntervalResponse.value = false;
+                ElMessage.error('发送失败：' + error.message);
+            }
+        };
+
+        // 清除设备列表
+        const clearDeviceList = async () => {
+            if (!isConnected.value) {
+                ElMessage.warning('请先建立连接');
+                return;
+            }
+
+            try {
+                const message = whtsBackend.createClearDeviceListMessage();
+                console.log('发送清除设备列表:', whtsBackend.bytesToHexString(message));
+                await window.electronAPI.sendUdpData(message);
+                ElMessage.success('清除设备列表指令已发送');
             } catch (error) {
                 ElMessage.error('发送失败：' + error.message);
             }
@@ -1734,8 +1814,12 @@ export default {
             deleteConfig,
             deviceList,
             queryDeviceList,
+            clearDeviceList,
             showNewConfigDialog,
             isWaitingConfigResponse,
+            intervalConfig,
+            sendIntervalConfig,
+            isWaitingIntervalResponse,
             currentConfigName,
             detectionMode,
             isWaitingModeResponse,
@@ -2129,6 +2213,13 @@ export default {
 
 /* Ping相关样式 */
 .ping-config {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* 间隔配置样式 */
+.interval-config {
     display: flex;
     align-items: center;
     gap: 10px;
