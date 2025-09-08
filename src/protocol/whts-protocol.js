@@ -441,7 +441,7 @@ export class Master2BackendMessageParser {
         
         let offset = 1;
         for (let i = 0; i < deviceCount; i++) {
-            if (offset + 10 > payload.length) break;
+            if (offset + 11 > payload.length) break; // 增加1字节用于电池电量
             
             // 设备ID (4字节，小端)
             const deviceIdBytes = payload.slice(offset, offset + 4);
@@ -463,13 +463,18 @@ export class Master2BackendMessageParser {
             const versionPatch = payload[offset + 2] | (payload[offset + 3] << 8);
             offset += 4;
             
+            // 电池电量 (1字节，0~100%)
+            const batteryLevel = payload[offset];
+            offset += 1;
+            
             devices.push({
                 deviceId,
                 shortId,
                 online,
                 versionMajor,
                 versionMinor,
-                versionPatch
+                versionPatch,
+                batteryLevel
             });
         }
         
