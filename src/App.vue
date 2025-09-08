@@ -393,6 +393,20 @@
                                                     scope.row.versionPatch }}
                                             </template>
                                         </el-table-column>
+                                        <el-table-column label="电池电量" width="180">
+                                            <template #default="scope">
+                                                <div class="battery-level-container">
+                                                    <el-progress 
+                                                        :percentage="scope.row.batteryLevel || 0" 
+                                                        :color="getBatteryColor(scope.row.batteryLevel)"
+                                                        :show-text="false"
+                                                        :stroke-width="8"
+                                                        style="width: 100px; margin-right: 8px;"
+                                                    />
+                                                    <span class="battery-percentage">{{ scope.row.batteryLevel || 0 }}%</span>
+                                                </div>
+                                            </template>
+                                        </el-table-column>
                                         <el-table-column label="最后更新时间" width="200">
                                             <template #default="scope">
                                                 {{ scope.row.lastUpdate }}
@@ -1800,6 +1814,14 @@ export default {
             return 'danger';
         };
 
+        // 获取电池电量进度条颜色
+        const getBatteryColor = (batteryLevel) => {
+            if (batteryLevel == null || batteryLevel === undefined) return '#dcdfe6';
+            if (batteryLevel < 20) return '#f56c6c'; // 红色
+            if (batteryLevel < 50) return '#e6a23c'; // 橙色
+            return '#67c23a'; // 绿色
+        };
+
         onMounted(() => {
             scanPorts();
             window.electronAPI.onSerialData(handleSerialData);
@@ -1897,6 +1919,7 @@ export default {
             pingConfig,
             startPingTest,
             getPingResultType,
+            getBatteryColor,
             currentPingTest,
             resetConfigs,
             resetDialogVisible,
@@ -2308,6 +2331,19 @@ export default {
 .ping-time {
     font-size: 12px;
     color: #909399;
+}
+
+.battery-level-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.battery-percentage {
+    font-size: 12px;
+    font-weight: 500;
+    color: #606266;
+    min-width: 35px;
 }
 
 .no-result {
